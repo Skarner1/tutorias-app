@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "579088686999",
+    "project_id": "tutorias-ucatolica",
+    "storage_bucket": "tutorias-ucatolica.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:579088686999:android:94e60b8fb1b4c01ba62ed2",
+        "android_client_info": {
+          "package_name": "com.ucatolica.tutorias"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBGbjFyJ8NMTwFlVn6EpkNIT0hINI8VrdM"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
