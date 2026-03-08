@@ -10,19 +10,19 @@ class GeminiService {
   /// Inicializa el modelo Gemini. Llamar una sola vez al arrancar la app.
   static void init() {
     final apiKey = dotenv.env['GEMINI_API_KEY'] ?? '';
-    if (apiKey.isEmpty || apiKey == 'AIzaSyBNE2qZ-ZPmossftxPHTlJVeC0OB2RJt9s') {
+    if (apiKey.isEmpty || apiKey == 'TU_API_KEY_AQUI') {
       debugPrint('⚠️ GeminiService: API key no configurada, usando análisis local.');
       return;
     }
     _model = GenerativeModel(
-      model: 'gemini-1.5-flash',
+      model: 'gemini-2.0-flash',
       apiKey: apiKey,
       generationConfig: GenerationConfig(
         temperature: 0.7,
         maxOutputTokens: 600,
       ),
     );
-    debugPrint('🤖 GeminiService: modelo gemini-1.5-flash inicializado correctamente.');
+    debugPrint('🤖 GeminiService: modelo gemini-1.5-flash inicializado. Key: ${apiKey.substring(0, 8)}...');
   }
 
   /// Devuelve true si Gemini está disponible (API key configurada).
