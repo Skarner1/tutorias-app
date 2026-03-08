@@ -10,7 +10,7 @@ class GeminiService {
   /// Inicializa el modelo Gemini. Llamar una sola vez al arrancar la app.
   static void init() {
     final apiKey = dotenv.env['GEMINI_API_KEY'] ?? '';
-    if (apiKey.isEmpty || apiKey == 'TU_API_KEY_AQUI') {
+    if (apiKey.isEmpty || apiKey == 'AIzaSyBNE2qZ-ZPmossftxPHTlJVeC0OB2RJt9s') {
       debugPrint('⚠️ GeminiService: API key no configurada, usando análisis local.');
       return;
     }
