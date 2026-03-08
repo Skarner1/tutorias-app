@@ -3,13 +3,20 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart';
 import 'package:intl/date_symbol_data_local.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'services/auth_service.dart';
 import 'services/tutorias_service.dart';
 import 'services/ai_service.dart';
+import 'services/gemini_service.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  // Cargar variables de entorno (.env) – si falla no detiene la app
+  try {
+    await dotenv.load(fileName: '.env');
+    GeminiService.init();
+  } catch (_) {}
   await Firebase.initializeApp();
   await initializeDateFormatting('es_ES', null);
   runApp(const MyApp());
@@ -552,6 +559,8 @@ class _StudentDashboardState extends State<StudentDashboard> with SingleTickerPr
             CircularProgressIndicator(),
             SizedBox(height: 16),
             Text("Analizando tu perfil académico...", style: TextStyle(color: AppColors.textSecondary, fontWeight: FontWeight.w600)),
+            SizedBox(height: 6),
+            Text("Consultando Gemini AI ✨", style: TextStyle(color: Colors.grey, fontSize: 12)),
           ]));
         }
         if (snapshot.hasError) return Center(child: Text("Error en IA: ${snapshot.error}"));
@@ -564,7 +573,34 @@ class _StudentDashboardState extends State<StudentDashboard> with SingleTickerPr
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             const Text("Análisis de IA", style: AppTextStyles.titleModern),
             const SizedBox(height: 4),
-            Text("Actualizado ahora mismo · Score basado en tu horario real", style: TextStyle(fontSize: 12, color: Colors.grey.shade400, fontWeight: FontWeight.w500)),
+            Row(children: [
+              Flexible(
+                child: Text("Actualizado ahora mismo · Score basado en tu horario real", style: TextStyle(fontSize: 12, color: Colors.grey.shade400, fontWeight: FontWeight.w500)),
+              ),
+              const SizedBox(width: 8),
+              if (res.usaGemini)
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  decoration: BoxDecoration(
+                    gradient: const LinearGradient(colors: [Color(0xFF4285F4), Color(0xFF34A853)]),
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: const Row(mainAxisSize: MainAxisSize.min, children: [
+                    Icon(Icons.auto_awesome, color: Colors.white, size: 11),
+                    SizedBox(width: 4),
+                    Text("Gemini AI", style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.w800, letterSpacing: 0.5)),
+                  ]),
+                )
+              else
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: Colors.grey.shade200,
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: const Text("Análisis local", style: TextStyle(color: Colors.grey, fontSize: 10, fontWeight: FontWeight.w600)),
+                ),
+            ]),
             const SizedBox(height: 24),
 
             // --- SCORE PRINCIPAL ---

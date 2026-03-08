@@ -1,5 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart';
+import 'gemini_service.dart';
 
 class IAResult {
   final int score;
@@ -14,6 +15,8 @@ class IAResult {
   final List<String> diasSobrecargados;
   final List<String> sugerencias;
   final String scoreDetalle;
+  /// true si el diagnóstico/recomendación fue generado por Gemini AI
+  final bool usaGemini;
 
   IAResult({
     required this.score,
@@ -27,7 +30,29 @@ class IAResult {
     required this.diasSobrecargados,
     required this.sugerencias,
     required this.scoreDetalle,
+    this.usaGemini = false,
   });
+
+  IAResult copyWith({
+    String? justificacion,
+    String? recomendacion,
+    bool? usaGemini,
+  }) {
+    return IAResult(
+      score: score,
+      nivelRiesgo: nivelRiesgo,
+      recomendacion: recomendacion ?? this.recomendacion,
+      materias: materias,
+      tutorias: tutorias,
+      justificacion: justificacion ?? this.justificacion,
+      horasSemanales: horasSemanales,
+      cargaPorDia: cargaPorDia,
+      diasSobrecargados: diasSobrecargados,
+      sugerencias: sugerencias,
+      scoreDetalle: scoreDetalle,
+      usaGemini: usaGemini ?? this.usaGemini,
+    );
+  }
 }
 
 class AIService {
@@ -171,7 +196,7 @@ class AIService {
         sugerencias: sugerencias,
       );
 
-      return IAResult(
+      final IAResult localResult = IAResult(
         score: score,
         nivelRiesgo: riesgo,
         recomendacion: recomendacionFinal,
@@ -184,6 +209,32 @@ class AIService {
         sugerencias: sugerencias.take(4).toList(),
         scoreDetalle: scoreDetalle,
       );
+
+      // Intentar enriquecer con Gemini AI (si está disponible)
+      if (GeminiService.disponible) {
+        try {
+          final geminiData = await GeminiService.enriquecerAnalisis(
+            score: score,
+            nivelRiesgo: riesgo,
+            numMaterias: numMaterias,
+            horasSemanales: horasSemanales,
+            diasSobrecargados: diasSobrecargados,
+            numTutorias: numTutorias,
+            sugerenciasTutorias: sugerencias.take(4).toList(),
+            scoreDetalle: scoreDetalle,
+          );
+          return localResult.copyWith(
+            justificacion: geminiData['justificacion'],
+            recomendacion: geminiData['recomendacion'],
+            usaGemini: true,
+          );
+        } catch (_) {
+          // Fallback silencioso: devolver análisis local sin Gemini
+          return localResult;
+        }
+      }
+
+      return localResult;
     } catch (e) {
       throw Exception('Error en IA: $e');
     }
