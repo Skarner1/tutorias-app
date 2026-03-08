@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/foundation.dart';
 import 'package:intl/intl.dart';
 import 'gemini_service.dart';
 
@@ -211,6 +212,7 @@ class AIService {
       );
 
       // Intentar enriquecer con Gemini AI (si está disponible)
+      debugPrint('🔍 AIService: GeminiService.disponible = ${GeminiService.disponible}');
       if (GeminiService.disponible) {
         try {
           final geminiData = await GeminiService.enriquecerAnalisis(
@@ -223,13 +225,15 @@ class AIService {
             sugerenciasTutorias: sugerencias.take(4).toList(),
             scoreDetalle: scoreDetalle,
           );
+          debugPrint('✅ AIService: Gemini respondió correctamente, usando análisis enriquecido.');
           return localResult.copyWith(
             justificacion: geminiData['justificacion'],
             recomendacion: geminiData['recomendacion'],
             usaGemini: true,
           );
-        } catch (_) {
+        } catch (e) {
           // Fallback silencioso: devolver análisis local sin Gemini
+          debugPrint('❌ AIService: Gemini falló ($e), usando análisis local como fallback.');
           return localResult;
         }
       }

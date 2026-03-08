@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:google_generative_ai/google_generative_ai.dart';
 
@@ -9,7 +10,10 @@ class GeminiService {
   /// Inicializa el modelo Gemini. Llamar una sola vez al arrancar la app.
   static void init() {
     final apiKey = dotenv.env['GEMINI_API_KEY'] ?? '';
-    if (apiKey.isEmpty || apiKey == 'TU_API_KEY_AQUI') return;
+    if (apiKey.isEmpty || apiKey == 'TU_API_KEY_AQUI') {
+      debugPrint('⚠️ GeminiService: API key no configurada, usando análisis local.');
+      return;
+    }
     _model = GenerativeModel(
       model: 'gemini-1.5-flash',
       apiKey: apiKey,
@@ -18,6 +22,7 @@ class GeminiService {
         maxOutputTokens: 600,
       ),
     );
+    debugPrint('🤖 GeminiService: modelo gemini-1.5-flash inicializado correctamente.');
   }
 
   /// Devuelve true si Gemini está disponible (API key configurada).
@@ -42,6 +47,8 @@ class GeminiService {
     required String scoreDetalle,
   }) async {
     if (_model == null) throw Exception('Gemini no inicializado');
+
+    debugPrint('🚀 GeminiService: enviando prompt a Gemini para score=$score, riesgo=$nivelRiesgo');
 
     final String contextoDias = diasSobrecargados.isEmpty
         ? 'ninguno'

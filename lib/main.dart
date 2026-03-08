@@ -12,11 +12,16 @@ import 'package:firebase_auth/firebase_auth.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  // Cargar variables de entorno (.env) – si falla no detiene la app
+  // Cargar variables de entorno (.env)
   try {
     await dotenv.load(fileName: '.env');
+    final key = dotenv.env['GEMINI_API_KEY'] ?? '';
+    debugPrint('✅ .env cargado. GEMINI_API_KEY presente: ${key.isNotEmpty && key != "TU_API_KEY_AQUI"}');
     GeminiService.init();
-  } catch (_) {}
+    debugPrint('✅ GeminiService.disponible = ${GeminiService.disponible}');
+  } catch (e) {
+    debugPrint('❌ Error cargando .env o Gemini: $e');
+  }
   await Firebase.initializeApp();
   await initializeDateFormatting('es_ES', null);
   runApp(const MyApp());
