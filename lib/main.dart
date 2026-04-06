@@ -408,7 +408,43 @@ class _StudentDashboardState extends State<StudentDashboard> with SingleTickerPr
                     onPressed: estadoVisual==1 || estadoVisual==3 ? null : () {
                       if(estadoVisual==4) _borrarGrupo(docId);
                       else if(estadoVisual==2) { if(data['tipo']=='GrupoEstudio') _tutoriasService.salirDeGrupo(docId, _user.uid); else if(!esFijo) _cancelarReserva(context, docId); }
-                      else { if(data['tipo']=='GrupoEstudio') _tutoriasService.unirseAGrupo(docId, _user.uid); else _mostrarDialogoReserva(context, docId, data, esFijo); }
+                      else {
+                        // Verificar conflicto antes de reservar o unirse
+                        if (!esFijo && data['fecha'] != null) {
+                          final DateTime fechaEvento = (data['fecha'] as Timestamp).toDate();
+                          final int duracion = 1; // 1 hora por defecto
+                          final bool conflictoReal = _hayConflicto(fechaEvento, duracion);
+                          if (conflictoReal) {
+                            final String diaSemana = _traducirDia(DateFormat('EEEE').format(fechaEvento));
+                            final String horaStr = DateFormat('HH:mm').format(fechaEvento);
+                            showDialog(
+                              context: context,
+                              builder: (ctx) => AlertDialog(
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                                title: Row(children: const [
+                                  Icon(Icons.schedule_rounded, color: Colors.orange),
+                                  SizedBox(width: 8),
+                                  Expanded(child: Text("Cruce de horario", style: TextStyle(fontSize: 17, fontWeight: FontWeight.w900))),
+                                ]),
+                                content: Text(
+                                  "Tienes una clase el $diaSemana a las $horaStr que se cruza con esta tutoría.\n\nNo puedes reservar un espacio que coincide con tu horario de clases.",
+                                  style: const TextStyle(height: 1.5),
+                                ),
+                                actions: [
+                                  ElevatedButton(
+                                    style: ElevatedButton.styleFrom(backgroundColor: AppColors.primary, foregroundColor: Colors.white),
+                                    onPressed: () => Navigator.pop(ctx),
+                                    child: const Text("ENTENDIDO"),
+                                  ),
+                                ],
+                              ),
+                            );
+                            return;
+                          }
+                        }
+                        if(data['tipo']=='GrupoEstudio') _tutoriasService.unirseAGrupo(docId, _user.uid);
+                        else _mostrarDialogoReserva(context, docId, data, esFijo);
+                      }
                     },
                     child: Text(estadoVisual==4 ? "BORRAR GRUPO" : (estadoVisual==2 ? "CANCELAR" : (estadoVisual==1 ? "HORARIO OCUPADO" : "RESERVAR AHORA")), style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 13))
                 ))
@@ -555,20 +591,35 @@ class _StudentDashboardState extends State<StudentDashboard> with SingleTickerPr
     );
   }
 
+  // Key para forzar recarga del FutureBuilder de IA
+  int _aiReloadKey = 0;
+
   Widget _buildAITab() {
     return FutureBuilder<IAResult>(
+      key: ValueKey(_aiReloadKey),
       future: _aiService.analizarEstudiante(_user.uid),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const Center(child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
             CircularProgressIndicator(),
             SizedBox(height: 16),
-            Text("Analizando tu perfil académico...", style: TextStyle(color: AppColors.textSecondary, fontWeight: FontWeight.w600)),
+            Text("Calculando tu score académico...", style: TextStyle(color: AppColors.textSecondary, fontWeight: FontWeight.w600)),
             SizedBox(height: 6),
-            Text("Consultando Gemini AI ✨", style: TextStyle(color: Colors.grey, fontSize: 12)),
+            Text("Consultando IA Online ✨", style: TextStyle(color: Colors.grey, fontSize: 12)),
           ]));
         }
-        if (snapshot.hasError) return Center(child: Text("Error en IA: ${snapshot.error}"));
+        if (snapshot.hasError) return Center(child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+          const Icon(Icons.error_outline, color: Colors.red, size: 48),
+          const SizedBox(height: 12),
+          Text("Error en IA", style: const TextStyle(color: AppColors.textSecondary)),
+          const SizedBox(height: 16),
+          ElevatedButton.icon(
+            onPressed: () => setState(() => _aiReloadKey++),
+            icon: const Icon(Icons.refresh),
+            label: const Text("Reintentar"),
+            style: ElevatedButton.styleFrom(backgroundColor: AppColors.primary, foregroundColor: Colors.white),
+          ),
+        ]));
         final res = snapshot.data!;
         final Color colorRiesgo = res.nivelRiesgo == 'Alto' ? Colors.red : (res.nivelRiesgo == 'Medio' ? Colors.orange : Colors.green);
         final String emojiRiesgo = res.nivelRiesgo == 'Alto' ? '🔴' : res.nivelRiesgo == 'Medio' ? '🟡' : '🟢';
@@ -576,39 +627,24 @@ class _StudentDashboardState extends State<StudentDashboard> with SingleTickerPr
         return SingleChildScrollView(
           padding: const EdgeInsets.all(20),
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            const Text("Análisis de IA", style: AppTextStyles.titleModern),
-            const SizedBox(height: 4),
-            Row(children: [
-              Flexible(
-                child: Text("Actualizado ahora mismo · Score basado en tu horario real", style: TextStyle(fontSize: 12, color: Colors.grey.shade400, fontWeight: FontWeight.w500)),
-              ),
-              const SizedBox(width: 8),
-              if (res.usaGemini)
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                  decoration: BoxDecoration(
-                    gradient: const LinearGradient(colors: [Color(0xFF4285F4), Color(0xFF34A853)]),
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: const Row(mainAxisSize: MainAxisSize.min, children: [
-                    Icon(Icons.auto_awesome, color: Colors.white, size: 11),
-                    SizedBox(width: 4),
-                    Text("Gemini AI", style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.w800, letterSpacing: 0.5)),
-                  ]),
-                )
-              else
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                  decoration: BoxDecoration(
-                    color: Colors.grey.shade200,
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: const Text("Análisis local", style: TextStyle(color: Colors.grey, fontSize: 10, fontWeight: FontWeight.w600)),
-                ),
-            ]),
-            const SizedBox(height: 24),
 
-            // --- SCORE PRINCIPAL ---
+            // ══════════════════════════════════════════
+            // SECCIÓN 1 — ANÁLISIS LOCAL (score + datos)
+            // ══════════════════════════════════════════
+            Row(children: [
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                decoration: BoxDecoration(color: AppColors.primary.withOpacity(0.1), borderRadius: BorderRadius.circular(20)),
+                child: const Row(mainAxisSize: MainAxisSize.min, children: [
+                  Icon(Icons.calculate_outlined, color: AppColors.primary, size: 13),
+                  SizedBox(width: 5),
+                  Text("Análisis local · Score", style: TextStyle(color: AppColors.primary, fontSize: 11, fontWeight: FontWeight.w800, letterSpacing: 0.3)),
+                ]),
+              ),
+            ]),
+            const SizedBox(height: 12),
+
+            // Score principal
             Container(
               width: double.infinity,
               padding: const EdgeInsets.symmetric(vertical: 28, horizontal: 24),
@@ -627,16 +663,15 @@ class _StudentDashboardState extends State<StudentDashboard> with SingleTickerPr
                   ])),
                   Text("SCORE ACADÉMICO", style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: colorRiesgo.withOpacity(0.7), letterSpacing: 1)),
                 ]),
-                // Indicador circular visual
                 SizedBox(width: 80, height: 80, child: Stack(alignment: Alignment.center, children: [
                   CircularProgressIndicator(value: res.score / 100, strokeWidth: 7, backgroundColor: colorRiesgo.withOpacity(0.1), valueColor: AlwaysStoppedAnimation<Color>(colorRiesgo)),
                   Text("${res.score}%", style: TextStyle(fontSize: 13, fontWeight: FontWeight.w900, color: colorRiesgo)),
                 ])),
               ]),
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 12),
 
-            // --- MÉTRICAS RÁPIDAS ---
+            // Métricas rápidas
             Row(children: [
               Expanded(child: _metricaCard("Materias", "${res.materias}", Icons.book_outlined, AppColors.primary)),
               const SizedBox(width: 10),
@@ -644,30 +679,131 @@ class _StudentDashboardState extends State<StudentDashboard> with SingleTickerPr
               const SizedBox(width: 10),
               Expanded(child: _metricaCard("Tutorías", "${res.tutorias}", Icons.school_outlined, Colors.purple)),
             ]),
-            const SizedBox(height: 16),
+            const SizedBox(height: 12),
 
-            // --- CARGA POR DÍA ---
+            // Carga por día
             if (res.cargaPorDia.isNotEmpty) ...[
               _aiCard("Carga por día de la semana", "", Icons.bar_chart_rounded, AppColors.primary, child: _buildBarrasCarga(res.cargaPorDia, res.diasSobrecargados)),
-              const SizedBox(height: 16),
+              const SizedBox(height: 12),
             ],
 
-            // --- DESGLOSE DE SCORE ---
+            // Desglose de score
             _aiCard("¿Por qué este puntaje?", res.scoreDetalle, Icons.calculate_outlined, Colors.indigo, icono: true),
-            const SizedBox(height: 16),
+            const SizedBox(height: 28),
 
-            // --- DIAGNÓSTICO ---
-            _aiCard("Diagnóstico académico", res.justificacion, Icons.psychology_alt, colorRiesgo, icono: true),
-            const SizedBox(height: 16),
+            // ══════════════════════════════════════════
+            // SECCIÓN 2 — IA ONLINE (diagnóstico + recomendaciones)
+            // ══════════════════════════════════════════
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(2),
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(
+                  colors: [Color(0xFF6C63FF), Color(0xFF3ECFCF), Color(0xFF43E97B)],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: Container(
+                decoration: BoxDecoration(color: const Color(0xFFF3F0FF), borderRadius: BorderRadius.circular(18)),
+                padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
+                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  // Header IA Online
+                  Row(children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                      decoration: BoxDecoration(
+                        gradient: const LinearGradient(colors: [Color(0xFF6C63FF), Color(0xFF3ECFCF)]),
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: const Row(mainAxisSize: MainAxisSize.min, children: [
+                        Icon(Icons.auto_awesome, color: Colors.white, size: 13),
+                        SizedBox(width: 5),
+                        Text("IA Online", style: TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w800, letterSpacing: 0.3)),
+                      ]),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        res.usaGemini ? "Análisis generado por inteligencia artificial" : "IA no disponible — mostrando análisis local",
+                        style: TextStyle(fontSize: 11, color: res.usaGemini ? const Color(0xFF3C4043) : Colors.grey, fontWeight: FontWeight.w500),
+                      ),
+                    ),
+                    if (!res.usaGemini)
+                      const Icon(Icons.wifi_off, color: Colors.grey, size: 16),
+                    // Botón recarga
+                    GestureDetector(
+                      onTap: () => setState(() => _aiReloadKey++),
+                      child: Container(
+                        margin: const EdgeInsets.only(left: 6),
+                        padding: const EdgeInsets.all(6),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF6C63FF).withOpacity(0.12),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: const Icon(Icons.refresh_rounded, size: 16, color: Color(0xFF6C63FF)),
+                      ),
+                    ),
+                  ]),
+                  const SizedBox(height: 14),
 
-            // --- RECOMENDACIÓN ---
-            _aiCard("Recomendaciones personalizadas", res.recomendacion, Icons.lightbulb_circle, Colors.blue, icono: true),
+                  if (!res.usaGemini)
+                    Container(
+                      padding: const EdgeInsets.all(14),
+                      decoration: BoxDecoration(color: Colors.grey.shade100, borderRadius: BorderRadius.circular(14)),
+                      child: const Row(children: [
+                        Icon(Icons.info_outline, color: Colors.grey, size: 18),
+                        SizedBox(width: 10),
+                        Expanded(child: Text(
+                          "La IA online no está disponible. Verifica tu conexión a internet.",
+                          style: TextStyle(fontSize: 12, color: Colors.grey),
+                        )),
+                      ]),
+                    )
+                  else ...[
+                    // Diagnóstico Gemini
+                    _aiCardGemini("Diagnóstico", res.justificacion, Icons.psychology_alt, colorRiesgo),
+                    const SizedBox(height: 12),
+                    // Recomendaciones Gemini
+                    _aiCardGemini("Recomendaciones personalizadas", res.recomendacion, Icons.lightbulb_circle, const Color(0xFF4285F4)),
+                  ],
+                ]),
+              ),
+            ),
             const SizedBox(height: 24),
           ]),
         );
       },
     );
   }
+
+  /// Tarjeta de análisis para la sección de IA Online
+  Widget _aiCardGemini(String titulo, String contenido, IconData icono, Color color) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [BoxShadow(color: color.withOpacity(0.07), blurRadius: 10, offset: const Offset(0, 3))],
+      ),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(children: [
+          Container(
+            padding: const EdgeInsets.all(7),
+            decoration: BoxDecoration(color: color.withOpacity(0.1), borderRadius: BorderRadius.circular(10)),
+            child: Icon(icono, color: color, size: 16),
+          ),
+          const SizedBox(width: 10),
+          Text(titulo, style: TextStyle(fontSize: 14, fontWeight: FontWeight.w800, color: color)),
+        ]),
+        const SizedBox(height: 12),
+        Text(contenido, style: const TextStyle(fontSize: 13, color: Color(0xFF3C4043), height: 1.55)),
+      ]),
+    );
+  }
+
 
   Widget _metricaCard(String label, String valor, IconData icon, Color color) {
     return Container(
@@ -1005,9 +1141,52 @@ class _StudentDashboardState extends State<StudentDashboard> with SingleTickerPr
               style: ElevatedButton.styleFrom(backgroundColor: AppColors.primary, foregroundColor: Colors.white, minimumSize: const Size(double.infinity, 56), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16))),
               onPressed: () async {
                 if (mC.text.isNotEmpty) {
+                  final int inicio = hI.hour * 100 + hI.minute;
+                  final int fin = hF.hour * 100 + hF.minute;
+                  // Validar que la hora fin sea mayor que inicio
+                  if (fin <= inicio) {
+                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                      content: Text("⚠️ La hora de fin debe ser mayor que la de inicio."),
+                      backgroundColor: Colors.orange,
+                    ));
+                    return;
+                  }
+                  // Detectar conflictos con clases existentes
+                  final conflicto = _miHorarioCache.where((clase) =>
+                    clase['dia'] == dS &&
+                    inicio < (clase['horaFin'] as int) &&
+                    fin > (clase['horaInicio'] as int)
+                  ).toList();
+                  if (conflicto.isNotEmpty) {
+                    final claseConflicto = conflicto.first;
+                    final hi = _formatoHora(claseConflicto['horaInicio'] as int);
+                    final hf = _formatoHora(claseConflicto['horaFin'] as int);
+                    showDialog(
+                      context: context,
+                      builder: (ctx2) => AlertDialog(
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                        title: Row(children: const [
+                          Icon(Icons.warning_amber_rounded, color: Colors.orange),
+                          SizedBox(width: 8),
+                          Text("Conflicto de horario", style: TextStyle(fontSize: 17, fontWeight: FontWeight.w900)),
+                        ]),
+                        content: Text(
+                          "Ya tienes '${claseConflicto['materia']}' el $dS de $hi a $hf.\n\nNo puedes agregar otra materia en ese bloque de tiempo.",
+                          style: const TextStyle(height: 1.5),
+                        ),
+                        actions: [
+                          ElevatedButton(
+                            style: ElevatedButton.styleFrom(backgroundColor: AppColors.primary, foregroundColor: Colors.white),
+                            onPressed: () => Navigator.pop(ctx2),
+                            child: const Text("ENTENDIDO"),
+                          ),
+                        ],
+                      ),
+                    );
+                    return;
+                  }
                   await _tutoriasService.agregarClaseEstudiante(
-                    _user.uid, mC.text, dS,
-                    hI.hour * 100 + hI.minute, hF.hour * 100 + hF.minute,
+                    _user.uid, mC.text, dS, inicio, fin,
                     salon: sC.text.trim(),
                   );
                   Navigator.pop(ctx);
@@ -1161,6 +1340,14 @@ class _ProfessorDashboardState extends State<ProfessorDashboard> with SingleTick
             setState(() => _misMateriasConfiguradas.removeAt(i));
             await _tutoriasService.actualizarMateriasProfesor(_user.uid, _misMateriasConfiguradas);
           },
+          onEditar: (i, valorActual) => _editarItemLista(
+            indice: i,
+            valorActual: valorActual,
+            titulo: "Editar materia",
+            hint: "Ej: Cálculo I",
+            lista: _misMateriasConfiguradas,
+            onGuardar: () => _tutoriasService.actualizarMateriasProfesor(_user.uid, _misMateriasConfiguradas),
+          ),
         ),
         const SizedBox(height: 20),
 
@@ -1181,6 +1368,14 @@ class _ProfessorDashboardState extends State<ProfessorDashboard> with SingleTick
             setState(() => _misTutoriasConfiguradas.removeAt(i));
             await FirebaseFirestore.instance.collection('users').doc(_user.uid).update({'tutorias_dicta': _misTutoriasConfiguradas});
           },
+          onEditar: (i, valorActual) => _editarItemLista(
+            indice: i,
+            valorActual: valorActual,
+            titulo: "Editar tutoría",
+            hint: "Ej: Álgebra Lineal",
+            lista: _misTutoriasConfiguradas,
+            onGuardar: () => FirebaseFirestore.instance.collection('users').doc(_user.uid).update({'tutorias_dicta': _misTutoriasConfiguradas}),
+          ),
         ),
         const SizedBox(height: 24),
       ]),
@@ -1194,6 +1389,7 @@ class _ProfessorDashboardState extends State<ProfessorDashboard> with SingleTick
     required List<String> items,
     required VoidCallback onAgregar,
     required Function(int) onEliminar,
+    Function(int, String)? onEditar,
   }) {
     return Container(
       decoration: BoxDecoration(
@@ -1238,21 +1434,41 @@ class _ProfessorDashboardState extends State<ProfessorDashboard> with SingleTick
               runSpacing: 8,
               children: items.asMap().entries.map((entry) {
                 final c = _getMateriaColor(entry.value);
-                return GestureDetector(
-                  onLongPress: () => onEliminar(entry.key),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                    decoration: BoxDecoration(
-                      color: c.withOpacity(0.12),
-                      borderRadius: BorderRadius.circular(30),
-                      border: Border.all(color: c.withOpacity(0.3)),
-                    ),
-                    child: Row(mainAxisSize: MainAxisSize.min, children: [
-                      Text(entry.value, style: TextStyle(color: c.withOpacity(0.9), fontWeight: FontWeight.w700, fontSize: 13)),
-                      const SizedBox(width: 6),
-                      Icon(Icons.close, size: 14, color: c.withOpacity(0.5)),
-                    ]),
+                return Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: c.withOpacity(0.12),
+                    borderRadius: BorderRadius.circular(30),
+                    border: Border.all(color: c.withOpacity(0.3)),
                   ),
+                  child: Row(mainAxisSize: MainAxisSize.min, children: [
+                    // Toca el texto para editar
+                    GestureDetector(
+                      onTap: onEditar != null
+                          ? () => onEditar(entry.key, entry.value)
+                          : null,
+                      child: Row(mainAxisSize: MainAxisSize.min, children: [
+                        Text(entry.value, style: TextStyle(color: c.withOpacity(0.9), fontWeight: FontWeight.w700, fontSize: 13)),
+                        if (onEditar != null) ...[
+                          const SizedBox(width: 4),
+                          Icon(Icons.edit, size: 12, color: c.withOpacity(0.5)),
+                        ],
+                      ]),
+                    ),
+                    const SizedBox(width: 6),
+                    // Toca la X para eliminar directamente
+                    GestureDetector(
+                      onTap: () => onEliminar(entry.key),
+                      child: Container(
+                        padding: const EdgeInsets.all(2),
+                        decoration: BoxDecoration(
+                          color: Colors.red.withOpacity(0.1),
+                          shape: BoxShape.circle,
+                        ),
+                        child: Icon(Icons.close, size: 14, color: Colors.red.shade400),
+                      ),
+                    ),
+                  ]),
                 );
               }).toList(),
             ),
@@ -1640,6 +1856,39 @@ class _ProfessorDashboardState extends State<ProfessorDashboard> with SingleTick
     );
   }
 
+  void _editarItemLista({
+    required int indice,
+    required String valorActual,
+    required String titulo,
+    required String hint,
+    required List<String> lista,
+    required Future<void> Function() onGuardar,
+  }) {
+    final ctrl = TextEditingController(text: valorActual);
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Text(titulo, style: const TextStyle(fontWeight: FontWeight.w900)),
+        content: TextField(controller: ctrl, autofocus: true, decoration: AppTheme.inputDecoration(hint, Icons.edit)),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("CANCELAR")),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.orange, foregroundColor: Colors.white),
+            onPressed: () async {
+              if (ctrl.text.trim().isNotEmpty) {
+                setState(() => lista[indice] = ctrl.text.trim());
+                await onGuardar();
+                if (mounted) Navigator.pop(ctx);
+              }
+            },
+            child: const Text("GUARDAR"),
+          ),
+        ],
+      ),
+    );
+  }
+
   void _crearBloqueFijo() {
     final dias = ["Lunes","Martes","Miércoles","Jueves","Viernes","Sábado"];
     String dS = "Lunes";
@@ -1703,13 +1952,61 @@ class _ProfessorDashboardState extends State<ProfessorDashboard> with SingleTick
                 style: ElevatedButton.styleFrom(backgroundColor: AppColors.primary, foregroundColor: Colors.white, minimumSize: const Size(double.infinity, 56), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16))),
                 onPressed: () async {
                   if (mS != null) {
+                    final int inicio = hI.hour * 100 + hI.minute;
+                    final int fin = hF.hour * 100 + hF.minute;
+                    // Validar hora fin > inicio
+                    if (fin <= inicio) {
+                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                        content: Text("⚠️ La hora de fin debe ser mayor que la de inicio."),
+                        backgroundColor: Colors.orange,
+                      ));
+                      return;
+                    }
+                    // Detectar conflictos con bloques existentes del profesor
+                    final snap = await FirebaseFirestore.instance
+                        .collection('horarios_profesores')
+                        .where('teacherId', isEqualTo: _user.uid)
+                        .where('dia', isEqualTo: dS)
+                        .get();
+                    final conflicto = snap.docs.where((d) {
+                      final data = d.data();
+                      return inicio < (data['horaFin'] as int) && fin > (data['horaInicio'] as int);
+                    }).toList();
+                    if (conflicto.isNotEmpty) {
+                      final c = conflicto.first.data();
+                      final hi = _formatoHora(c['horaInicio'] as int);
+                      final hf = _formatoHora(c['horaFin'] as int);
+                      showDialog(
+                        context: context,
+                        builder: (ctx2) => AlertDialog(
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                          title: Row(children: const [
+                            Icon(Icons.warning_amber_rounded, color: Colors.orange),
+                            SizedBox(width: 8),
+                            Text("Conflicto de horario", style: TextStyle(fontSize: 17, fontWeight: FontWeight.w900)),
+                          ]),
+                          content: Text(
+                            "Ya tienes '${c['materia']}' el $dS de $hi a $hf.\n\nNo puedes agregar otro bloque en ese intervalo.",
+                            style: const TextStyle(height: 1.5),
+                          ),
+                          actions: [
+                            ElevatedButton(
+                              style: ElevatedButton.styleFrom(backgroundColor: AppColors.primary, foregroundColor: Colors.white),
+                              onPressed: () => Navigator.pop(ctx2),
+                              child: const Text("ENTENDIDO"),
+                            ),
+                          ],
+                        ),
+                      );
+                      return;
+                    }
                     await FirebaseFirestore.instance.collection('horarios_profesores').add({
                       'teacherId': _user.uid,
                       'teacherName': _user.displayName ?? 'Docente',
                       'materia': mS,
                       'dia': dS,
-                      'horaInicio': hI.hour * 100 + hI.minute,
-                      'horaFin': hF.hour * 100 + hF.minute,
+                      'horaInicio': inicio,
+                      'horaFin': fin,
                       'salon': sC.text.isEmpty ? 'Por definir' : sC.text,
                       'tipo': 'Institucional',
                     });

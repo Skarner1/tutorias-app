@@ -1,41 +1,30 @@
+﻿import 'dart:convert';
+import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
-import 'package:google_generative_ai/google_generative_ai.dart';
-
-/// Servicio que usa Google Gemini para enriquecer el análisis académico
-/// generado por el algoritmo local de AIService.
+import 'package:http/http.dart' as http;
 class GeminiService {
-  static GenerativeModel? _model;
-
-  /// Inicializa el modelo Gemini. Llamar una sola vez al arrancar la app.
+  static String? _apiKey;
+  static const List<String> _modelos = [
+    'qwen/qwen3-4b:free',
+    'google/gemma-3-4b-it:free',
+    'meta-llama/llama-3.2-3b-instruct:free',
+    'google/gemma-3-12b-it:free',
+    'meta-llama/llama-3.3-70b-instruct:free',
+    'mistralai/mistral-small-3.1-24b-instruct:free',
+    'nvidia/nemotron-nano-9b-v2:free',
+    'stepfun/step-3.5-flash:free',
+  ];
   static void init() {
-    final apiKey = dotenv.env['GEMINI_API_KEY'] ?? '';
-    if (apiKey.isEmpty || apiKey == 'TU_API_KEY_AQUI') {
-      debugPrint('⚠️ GeminiService: API key no configurada, usando análisis local.');
+    final apiKey = dotenv.env['OPENROUTER_API_KEY'] ?? '';
+    if (apiKey.isEmpty || apiKey.startsWith('TU_API_KEY')) {
+      debugPrint('OpenRouter: API key no configurada.');
       return;
     }
-    _model = GenerativeModel(
-      model: 'gemini-2.0-flash',
-      apiKey: apiKey,
-      generationConfig: GenerationConfig(
-        temperature: 0.7,
-        maxOutputTokens: 600,
-      ),
-    );
-    debugPrint('🤖 GeminiService: modelo gemini-1.5-flash inicializado. Key: ${apiKey.substring(0, 8)}...');
+    _apiKey = apiKey;
+    debugPrint('OpenRouter: inicializado. Key: ${apiKey.substring(0, 10)}...');
   }
-
-  /// Devuelve true si Gemini está disponible (API key configurada).
-  static bool get disponible => _model != null;
-
-  /// Recibe el contexto académico calculado localmente y pide a Gemini
-  /// que genere un diagnóstico y recomendaciones más explicativas en español.
-  ///
-  /// Retorna un mapa con las claves:
-  ///   - `justificacion`: diagnóstico narrativo enriquecido
-  ///   - `recomendacion`: recomendaciones personalizadas detalladas
-  ///
-  /// Si falla, lanza excepción para que AIService use el fallback local.
+  static bool get disponible => _apiKey != null;
   static Future<Map<String, String>> enriquecerAnalisis({
     required int score,
     required String nivelRiesgo,
@@ -46,91 +35,67 @@ class GeminiService {
     required List<String> sugerenciasTutorias,
     required String scoreDetalle,
   }) async {
-    if (_model == null) throw Exception('Gemini no inicializado');
-
-    debugPrint('🚀 GeminiService: enviando prompt a Gemini para score=$score, riesgo=$nivelRiesgo');
-
-    final String contextoDias = diasSobrecargados.isEmpty
-        ? 'ninguno'
-        : diasSobrecargados.join(', ');
-
+    if (_apiKey == null) throw Exception('OpenRouter no inicializado');
+    final String contextoDias = diasSobrecargados.isEmpty ? 'ninguno' : diasSobrecargados.join(', ');
     final String contextoTutorias = sugerenciasTutorias.isEmpty
-        ? 'No hay tutorías disponibles para sus materias en este momento.'
+        ? 'No hay tutorias disponibles.'
         : sugerenciasTutorias.take(4).join('\n');
-
-    final String prompt = '''
-Eres un asistente académico universitario amigable, motivador y muy explícito. 
-Tu tarea es analizar la situación académica de un estudiante universitario y dar:
-1. Un DIAGNÓSTICO claro y detallado de por qué tiene ese nivel de riesgo.
-2. RECOMENDACIONES concretas, accionables y motivadoras.
-
-**Datos del estudiante:**
-- Score académico: $score / 100
-- Nivel de riesgo: $nivelRiesgo
-- Número de materias: $numMaterias
-- Horas de clase por semana: ${horasSemanales.toStringAsFixed(1)}h
-- Días con sobrecarga (más de 5h seguidas): $contextoDias
-- Tutorías activas inscritas: $numTutorias
-- Espacios de tutoría disponibles para sus materias:
-$contextoTutorias
-
-**Desglose de puntuación:**
-$scoreDetalle
-
----
-**INSTRUCCIONES:**
-- Responde ÚNICAMENTE en español.
-- Sé empático, claro y directo.
-- El DIAGNÓSTICO debe explicar en detalle por qué el estudiante tiene ese score y ese nivel de riesgo, mencionando cada factor.
-- Las RECOMENDACIONES deben ser pasos concretos que el estudiante puede hacer HOY para mejorar.
-- Si hay tutorías disponibles, menciónalas explícitamente en las recomendaciones.
-- Máximo 180 palabras por sección.
-- Usa emojis moderadamente para hacer el texto más amigable.
-- NO repitas los números del desglose, solo interprétalos en lenguaje natural.
-
-**Responde con este formato exacto (no agregues texto fuera de esto):**
-
-DIAGNÓSTICO:
-[tu diagnóstico aquí]
-
-RECOMENDACIONES:
-[tus recomendaciones aquí]
-''';
-
-    final response = await _model!.generateContent([Content.text(prompt)]);
-    final text = response.text ?? '';
-
-    if (text.isEmpty) throw Exception('Respuesta vacía de Gemini');
-
-    // Parsear la respuesta en las dos secciones
-    final diagMatch = RegExp(
-      r'DIAGNÓSTICO:\s*([\s\S]*?)(?=RECOMENDACIONES:|$)',
-      caseSensitive: false,
-    ).firstMatch(text);
-    final recomMatch = RegExp(
-      r'RECOMENDACIONES:\s*([\s\S]*?)$',
-      caseSensitive: false,
-    ).firstMatch(text);
-
-    final diagnostico = diagMatch?.group(1)?.trim() ?? '';
-    final recomendaciones = recomMatch?.group(1)?.trim() ?? '';
-
-    if (diagnostico.isEmpty || recomendaciones.isEmpty) {
-      throw Exception('Formato de respuesta inesperado de Gemini');
+    final String prompt = 'Eres un asistente academico universitario. '
+        'Responde en espanol con este formato EXACTO:\n\n'
+        'DIAGNOSTICO:\n[Explica el score y riesgo. Max 120 palabras.]\n\n'
+        'RECOMENDACIONES:\n[Pasos para mejorar. Max 120 palabras.]\n\n'
+        'DATOS: Score=$score/100, Riesgo=$nivelRiesgo, Materias=$numMaterias, '
+        'Horas=${horasSemanales.toStringAsFixed(1)}, Tutorias=$numTutorias, '
+        'Dias sobrecargados=$contextoDias. Tutorias: $contextoTutorias';
+    Exception? ultimoError;
+    for (final modelo in _modelos) {
+      for (int intento = 1; intento <= 2; intento++) {
+        try {
+          debugPrint('OpenRouter: $modelo intento $intento...');
+          final response = await http.post(
+            Uri.parse('https://openrouter.ai/api/v1/chat/completions'),
+            headers: {
+              'Authorization': 'Bearer $_apiKey',
+              'Content-Type': 'application/json',
+              'HTTP-Referer': 'https://tutorias-ucatolica.app',
+              'X-Title': 'Tutorias UCatolica',
+            },
+            body: jsonEncode({
+              'model': modelo,
+              'messages': [{'role': 'user', 'content': prompt}],
+              'max_tokens': 500,
+              'temperature': 0.7,
+              'provider': {'allow_fallbacks': true},
+            }),
+          ).timeout(const Duration(seconds: 40));
+          if (response.statusCode != 200) {
+            final err = jsonDecode(response.body);
+            final msg = err['error']?['message'] ?? 'HTTP ${response.statusCode}';
+            if (msg.contains('Provider') && intento < 2) {
+              await Future.delayed(const Duration(seconds: 3));
+              continue;
+            }
+            throw Exception(msg);
+          }
+          final data = jsonDecode(response.body);
+          final text = (data['choices'][0]['message']['content'] as String? ?? '').trim();
+          if (text.isEmpty) throw Exception('Respuesta vacia');
+          final diagMatch = RegExp(r'DIAGN[OÓ]STICO:\s*([\s\S]*?)(?=RECOMENDACIONES:|$)', caseSensitive: false).firstMatch(text);
+          final recomMatch = RegExp(r'RECOMENDACIONES:\s*([\s\S]*?)$', caseSensitive: false).firstMatch(text);
+          final diagnostico = diagMatch?.group(1)?.trim() ?? text;
+          final recomendaciones = recomMatch?.group(1)?.trim() ?? 'Revisa tu carga academica con tu tutor.';
+          debugPrint('OpenRouter exito con $modelo');
+          final recomFinal = sugerenciasTutorias.isNotEmpty
+              ? '$recomendaciones\n\nEspacios disponibles:\n${sugerenciasTutorias.take(4).join('\n')}'
+              : recomendaciones;
+          return {'justificacion': diagnostico, 'recomendacion': recomFinal};
+        } catch (e) {
+          debugPrint('OpenRouter: $modelo intento $intento fallo: $e');
+          ultimoError = Exception(e.toString());
+          if (intento < 2) await Future.delayed(const Duration(seconds: 2));
+        }
+      }
     }
-
-    // Agregar sugerencias de tutorías al final si existen
-    final recomConSugerencias = sugerenciasTutorias.isNotEmpty
-        ? '$recomendaciones\n\n📍 Espacios disponibles para tus materias:\n${sugerenciasTutorias.take(4).join('\n')}'
-        : recomendaciones;
-
-    return {
-      'justificacion': diagnostico,
-      'recomendacion': recomConSugerencias,
-    };
+    throw ultimoError ?? Exception('Todos los modelos fallaron');
   }
 }
-
-
-
-
