@@ -14,6 +14,8 @@ class TutoriasService {
     required String tipo,
     required DateTime fecha,
   }) async {
+    // Tutorías "Libre": expiran 1 día después de su fecha (sólo un día disponible)
+    final DateTime expira = fecha.add(const Duration(days: 1));
     await _db.collection('tutorias').add({
       'teacherId': teacherId,
       'teacherEmail': teacherEmail,
@@ -23,16 +25,18 @@ class TutoriasService {
       'link': link,
       'tipo': tipo,
       'fecha': Timestamp.fromDate(fecha),
+      'expiraEn': Timestamp.fromDate(expira),
+      'createdAt': FieldValue.serverTimestamp(),
       'status': 'disponible',
       'studentId': null,
       'studentEmail': null,
       'notaEstudiante': null,
       'materia_busqueda': materia.toLowerCase(),
-      'participants': [], // Inicializamos lista vacía para evitar errores
+      'participants': [], // Lista de alumnos que se han unido / la pidieron
     });
   }
 
-  // --- GESTIÓN DE GRUPOS DE ESTUDIO (NUEVO) ---
+  // --- GESTIÓN DE GRUPOS DE ESTUDIO ---
   Future<void> crearGrupoEstudio({
     required String creatorId,
     required String creatorName,
@@ -41,16 +45,20 @@ class TutoriasService {
     required String lugar,
     required DateTime fecha,
   }) async {
+    // Los grupos de estudio también caducan al día siguiente.
+    final DateTime expira = fecha.add(const Duration(days: 1));
     await _db.collection('tutorias').add({
       'teacherId': creatorId, // El creador actúa como "teacher"
       'teacherName': creatorName,
       'materia': materia,
-      'descripcion': tema, // El tema específico
-      'link': lugar, // El lugar físico
+      'descripcion': tema,
+      'link': lugar,
       'fecha': Timestamp.fromDate(fecha),
-      'tipo': 'GrupoEstudio', // Tipo especial
+      'expiraEn': Timestamp.fromDate(expira),
+      'createdAt': FieldValue.serverTimestamp(),
+      'tipo': 'GrupoEstudio',
       'status': 'disponible',
-      'participants': [], // Lista de estudiantes que asisten
+      'participants': [],
     });
   }
 
@@ -66,6 +74,29 @@ class TutoriasService {
     await _db.collection('tutorias').doc(docId).update({
       'participants': FieldValue.arrayRemove([studentId])
     });
+  }
+
+  // --- TUTORÍAS RECURRENTES (horarios_profesores) ---
+  // Un estudiante se anota a una tutoría fija (lunes/martes/miércoles del semestre).
+  Future<void> unirseABloqueFijo(String docId, String studentId) async {
+    await _db.collection('horarios_profesores').doc(docId).update({
+      'participants': FieldValue.arrayUnion([studentId]),
+    });
+  }
+
+  Future<void> salirDeBloqueFijo(String docId, String studentId) async {
+    await _db.collection('horarios_profesores').doc(docId).update({
+      'participants': FieldValue.arrayRemove([studentId]),
+    });
+  }
+
+  // El profesor puede modificar materia, día, horas, salón en cualquier momento
+  Future<void> actualizarBloqueFijo(String docId, Map<String, dynamic> cambios) async {
+    await _db.collection('horarios_profesores').doc(docId).update(cambios);
+  }
+
+  Future<void> borrarBloqueFijo(String docId) async {
+    await _db.collection('horarios_profesores').doc(docId).delete();
   }
 
   // --- GESTIÓN DE PERFIL PROFESOR (MATERIAS QUE DICTA) ---
@@ -101,15 +132,21 @@ class TutoriasService {
       'studentId': studentId,
       'studentEmail': studentEmail,
       'notaEstudiante': nota,
+      // También lo agregamos a participants para el conteo unificado.
+      'participants': FieldValue.arrayUnion([studentId]),
     });
   }
 
   Future<void> cancelarReserva(String idTutoria) async {
-    await _db.collection('tutorias').doc(idTutoria).update({
+    final doc = await _db.collection('tutorias').doc(idTutoria).get();
+    final String? sid = (doc.data() ?? const {})['studentId'] as String?;
+    final Map<String, dynamic> upd = {
       'status': 'disponible',
       'studentId': null,
       'studentEmail': null,
       'notaEstudiante': null,
-    });
+    };
+    if (sid != null) upd['participants'] = FieldValue.arrayRemove([sid]);
+    await _db.collection('tutorias').doc(idTutoria).update(upd);
   }
 }
