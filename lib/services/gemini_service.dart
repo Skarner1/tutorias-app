@@ -243,6 +243,28 @@ class GeminiService {
       banco = _bancoHistoria();
     } else if (any(['estadist', 'estadíst', 'probabilid'])) {
       banco = _bancoEstadistica();
+    } else if (any(['biolog', 'biolog', 'celula', 'célula', 'genet', 'genét', 'botan', 'botán'])) {
+      banco = _bancoBiologia();
+    } else if (any(['anatom', 'medic', 'médic', 'fisiolog', 'enferm', 'salud'])) {
+      banco = _bancoMedicina();
+    } else if (any(['derech', 'jurid', 'juríd', 'ley', 'leyes', 'constitu', 'penal', 'civil'])) {
+      banco = _bancoDerecho();
+    } else if (any(['econom', 'finan', 'contab', 'contad', 'admin', 'mercad', 'market'])) {
+      banco = _bancoEconomia();
+    } else if (any(['filosof', 'filosóf', 'etica', 'ética', 'logic', 'lógic'])) {
+      banco = _bancoFilosofia();
+    } else if (any(['psicolog', 'psicolog', 'conduct', 'comport'])) {
+      banco = _bancoPsicologia();
+    } else if (any(['geograf', 'geograf', 'geolog', 'geolog', 'territ', 'mapa'])) {
+      banco = _bancoGeografia();
+    } else if (any(['arte', 'músic', 'music', 'pintur', 'literatur', 'redaccion', 'redacción', 'lengua', 'español', 'espanol', 'castell'])) {
+      banco = _bancoLenguaArte();
+    } else if (any(['ingenier', 'circuit', 'electr', 'mecanism', 'estructur', 'civil', 'industr'])) {
+      banco = _bancoIngenieria();
+    } else if (any(['arquitect', 'diseño', 'diseno'])) {
+      banco = _bancoArquitectura();
+    } else if (any(['comunic', 'periodism', 'publicid', 'audiov'])) {
+      banco = _bancoComunicacion();
     } else {
       banco = _bancoGenerico(materia);
     }
@@ -521,6 +543,291 @@ class GeminiService {
           opciones: const ['1/2', '1/3', '1/6', '6/6'],
           correcta: 2,
           explicacion: 'Hay 1 caso favorable de 6 posibles: 1/6.',
+        ),
+      ];
+
+  static List<QuizPregunta> _bancoBiologia() => [
+        QuizPregunta(
+          pregunta: '¿Cuál es la unidad básica de la vida?',
+          opciones: const ['Átomo', 'Célula', 'Tejido', 'Órgano'],
+          correcta: 1,
+          explicacion: 'La célula es la unidad estructural y funcional de los seres vivos.',
+        ),
+        QuizPregunta(
+          pregunta: 'El ADN se encuentra principalmente en:',
+          opciones: const ['Mitocondria', 'Núcleo', 'Ribosoma', 'Citoplasma'],
+          correcta: 1,
+          explicacion: 'El ADN se almacena en el núcleo de las células eucariotas.',
+        ),
+        QuizPregunta(
+          pregunta: 'La fotosíntesis ocurre principalmente en:',
+          opciones: const ['Raíz', 'Tallo', 'Hojas', 'Flor'],
+          correcta: 2,
+          explicacion: 'En las hojas, gracias a los cloroplastos.',
+        ),
+        QuizPregunta(
+          pregunta: '¿Cuántos cromosomas tiene una célula humana normal?',
+          opciones: const ['23', '46', '48', '64'],
+          correcta: 1,
+          explicacion: '46 cromosomas (23 pares).',
+        ),
+      ];
+
+  static List<QuizPregunta> _bancoMedicina() => [
+        QuizPregunta(
+          pregunta: '¿Cuántas cámaras tiene el corazón humano?',
+          opciones: const ['2', '3', '4', '5'],
+          correcta: 2,
+          explicacion: '2 aurículas y 2 ventrículos = 4 cámaras.',
+        ),
+        QuizPregunta(
+          pregunta: 'El hueso más largo del cuerpo humano es:',
+          opciones: const ['Húmero', 'Tibia', 'Fémur', 'Radio'],
+          correcta: 2,
+          explicacion: 'El fémur es el hueso del muslo.',
+        ),
+        QuizPregunta(
+          pregunta: 'La presión arterial normal en adultos es aproximadamente:',
+          opciones: const ['80/50', '120/80', '160/100', '200/120'],
+          correcta: 1,
+          explicacion: '120/80 mmHg es el rango normal.',
+        ),
+        QuizPregunta(
+          pregunta: '¿Qué órgano produce la insulina?',
+          opciones: const ['Hígado', 'Páncreas', 'Riñón', 'Estómago'],
+          correcta: 1,
+          explicacion: 'Las células beta del páncreas producen insulina.',
+        ),
+        QuizPregunta(
+          pregunta: 'La sangre es bombeada al cuerpo por el:',
+          opciones: const ['Pulmón', 'Hígado', 'Corazón', 'Cerebro'],
+          correcta: 2,
+          explicacion: 'El corazón es la bomba del sistema circulatorio.',
+        ),
+      ];
+
+  static List<QuizPregunta> _bancoDerecho() => [
+        QuizPregunta(
+          pregunta: 'La norma jerárquicamente superior en un Estado es:',
+          opciones: const ['Decreto', 'Ley', 'Constitución', 'Reglamento'],
+          correcta: 2,
+          explicacion: 'La Constitución es la norma suprema del ordenamiento.',
+        ),
+        QuizPregunta(
+          pregunta: 'El derecho que regula relaciones entre particulares es:',
+          opciones: const ['Penal', 'Civil', 'Constitucional', 'Tributario'],
+          correcta: 1,
+          explicacion: 'El derecho civil regula relaciones privadas.',
+        ),
+        QuizPregunta(
+          pregunta: 'La presunción de inocencia significa que:',
+          opciones: const ['Toda persona es culpable hasta probar lo contrario', 'Toda persona es inocente hasta que se demuestre lo contrario', 'No existe culpabilidad penal', 'El juez decide sin pruebas'],
+          correcta: 1,
+          explicacion: 'Es un principio fundamental del debido proceso.',
+        ),
+        QuizPregunta(
+          pregunta: '¿Qué rama del derecho regula los delitos y sanciones?',
+          opciones: const ['Civil', 'Laboral', 'Penal', 'Mercantil'],
+          correcta: 2,
+          explicacion: 'El derecho penal define delitos y penas.',
+        ),
+      ];
+
+  static List<QuizPregunta> _bancoEconomia() => [
+        QuizPregunta(
+          pregunta: 'Si la oferta de un producto sube y la demanda baja, el precio tiende a:',
+          opciones: const ['Subir', 'Bajar', 'Mantenerse igual', 'Duplicarse'],
+          correcta: 1,
+          explicacion: 'A mayor oferta y menor demanda, los precios bajan.',
+        ),
+        QuizPregunta(
+          pregunta: 'El PIB mide:',
+          opciones: const ['La inflación', 'La producción total de un país', 'La cantidad de habitantes', 'El número de empresas'],
+          correcta: 1,
+          explicacion: 'PIB = Producto Interno Bruto = producción total.',
+        ),
+        QuizPregunta(
+          pregunta: 'En contabilidad, Activo = Pasivo + ?',
+          opciones: const ['Ingresos', 'Gasto', 'Patrimonio', 'Utilidad'],
+          correcta: 2,
+          explicacion: 'Ecuación contable básica: Activo = Pasivo + Patrimonio.',
+        ),
+        QuizPregunta(
+          pregunta: 'El interés simple sobre 1.000.000 al 10% anual durante 1 año es:',
+          opciones: const ['10.000', '100.000', '1.000.000', '110.000'],
+          correcta: 1,
+          explicacion: '1.000.000 × 0.10 × 1 = 100.000.',
+        ),
+        QuizPregunta(
+          pregunta: 'La inflación es:',
+          opciones: const ['Aumento generalizado de precios', 'Bajada de precios', 'Estabilidad económica', 'Crecimiento del empleo'],
+          correcta: 0,
+          explicacion: 'Es el aumento sostenido del nivel general de precios.',
+        ),
+      ];
+
+  static List<QuizPregunta> _bancoFilosofia() => [
+        QuizPregunta(
+          pregunta: '"Pienso, luego existo" es una frase de:',
+          opciones: const ['Platón', 'Aristóteles', 'Descartes', 'Kant'],
+          correcta: 2,
+          explicacion: 'Cogito ergo sum, de René Descartes.',
+        ),
+        QuizPregunta(
+          pregunta: 'La ética estudia:',
+          opciones: const ['El origen del universo', 'La conducta moral del ser humano', 'Las leyes del Estado', 'Las matemáticas puras'],
+          correcta: 1,
+          explicacion: 'Es la rama que reflexiona sobre lo bueno y lo correcto.',
+        ),
+        QuizPregunta(
+          pregunta: 'Un silogismo válido tiene:',
+          opciones: const ['1 premisa y 1 conclusión', '2 premisas y 1 conclusión', '3 premisas y 2 conclusiones', 'Solo conclusiones'],
+          correcta: 1,
+          explicacion: 'Premisa mayor + premisa menor → conclusión.',
+        ),
+      ];
+
+  static List<QuizPregunta> _bancoPsicologia() => [
+        QuizPregunta(
+          pregunta: 'El padre del psicoanálisis es:',
+          opciones: const ['Skinner', 'Freud', 'Pavlov', 'Watson'],
+          correcta: 1,
+          explicacion: 'Sigmund Freud fundó el psicoanálisis.',
+        ),
+        QuizPregunta(
+          pregunta: 'El experimento del perro de Pavlov demuestra:',
+          opciones: const ['Condicionamiento clásico', 'Condicionamiento operante', 'Aprendizaje social', 'Inteligencia emocional'],
+          correcta: 0,
+          explicacion: 'Asociación entre estímulo neutro y respuesta.',
+        ),
+        QuizPregunta(
+          pregunta: 'Las tres instancias psíquicas según Freud son:',
+          opciones: const ['Mente, cuerpo, alma', 'Yo, super-yo, ello', 'Pasado, presente, futuro', 'Razón, emoción, instinto'],
+          correcta: 1,
+          explicacion: 'Yo (consciente), super-yo (moral), ello (impulsos).',
+        ),
+      ];
+
+  static List<QuizPregunta> _bancoGeografia() => [
+        QuizPregunta(
+          pregunta: '¿Cuál es el continente más grande?',
+          opciones: const ['África', 'Asia', 'América', 'Europa'],
+          correcta: 1,
+          explicacion: 'Asia es el continente más extenso del mundo.',
+        ),
+        QuizPregunta(
+          pregunta: 'El río más largo del mundo es:',
+          opciones: const ['Nilo', 'Amazonas', 'Yangtsé', 'Misisipi'],
+          correcta: 1,
+          explicacion: 'Estudios recientes ubican al Amazonas como el más largo.',
+        ),
+        QuizPregunta(
+          pregunta: '¿Cuántos océanos hay en el mundo?',
+          opciones: const ['3', '4', '5', '7'],
+          correcta: 2,
+          explicacion: 'Pacífico, Atlántico, Índico, Ártico y Antártico = 5.',
+        ),
+        QuizPregunta(
+          pregunta: 'La capital de Colombia es:',
+          opciones: const ['Medellín', 'Cali', 'Bogotá', 'Cartagena'],
+          correcta: 2,
+          explicacion: 'Bogotá D.C. es la capital de Colombia.',
+        ),
+      ];
+
+  static List<QuizPregunta> _bancoLenguaArte() => [
+        QuizPregunta(
+          pregunta: '¿Cuál es un sustantivo?',
+          opciones: const ['Correr', 'Bonito', 'Casa', 'Rápidamente'],
+          correcta: 2,
+          explicacion: 'Casa es un sustantivo (objeto/cosa).',
+        ),
+        QuizPregunta(
+          pregunta: 'Una oración debe tener al menos:',
+          opciones: const ['Un sustantivo', 'Un sujeto y un predicado', 'Una coma', 'Tres palabras'],
+          correcta: 1,
+          explicacion: 'Toda oración tiene sujeto y predicado.',
+        ),
+        QuizPregunta(
+          pregunta: '"Don Quijote de la Mancha" fue escrito por:',
+          opciones: const ['García Márquez', 'Cervantes', 'Borges', 'Neruda'],
+          correcta: 1,
+          explicacion: 'Miguel de Cervantes Saavedra.',
+        ),
+        QuizPregunta(
+          pregunta: 'Un sinónimo de "feliz" es:',
+          opciones: const ['Triste', 'Contento', 'Cansado', 'Enojado'],
+          correcta: 1,
+          explicacion: 'Contento expresa el mismo sentimiento.',
+        ),
+      ];
+
+  static List<QuizPregunta> _bancoIngenieria() => [
+        QuizPregunta(
+          pregunta: 'La Ley de Ohm establece que V = ?',
+          opciones: const ['I × R', 'I + R', 'I / R', 'I − R'],
+          correcta: 0,
+          explicacion: 'Voltaje = Intensidad × Resistencia.',
+        ),
+        QuizPregunta(
+          pregunta: 'La unidad de potencia eléctrica es:',
+          opciones: const ['Voltio', 'Amperio', 'Watt', 'Ohm'],
+          correcta: 2,
+          explicacion: 'P = V·I, medido en Watts (W).',
+        ),
+        QuizPregunta(
+          pregunta: 'El concreto está compuesto principalmente por:',
+          opciones: const ['Madera y agua', 'Cemento, arena, grava y agua', 'Solo cemento', 'Hierro y carbón'],
+          correcta: 1,
+          explicacion: 'La mezcla básica del hormigón.',
+        ),
+        QuizPregunta(
+          pregunta: 'Una palanca es un ejemplo de:',
+          opciones: const ['Fuente de energía', 'Máquina simple', 'Material conductor', 'Circuito eléctrico'],
+          correcta: 1,
+          explicacion: 'Es una de las máquinas simples clásicas.',
+        ),
+      ];
+
+  static List<QuizPregunta> _bancoArquitectura() => [
+        QuizPregunta(
+          pregunta: 'La escala 1:100 significa que 1 cm en el plano equivale a:',
+          opciones: const ['1 cm real', '10 cm reales', '100 cm reales', '1 km real'],
+          correcta: 2,
+          explicacion: '1 cm en el plano = 100 cm = 1 m en la realidad.',
+        ),
+        QuizPregunta(
+          pregunta: 'Un plano arquitectónico básico debe incluir:',
+          opciones: const ['Solo el color', 'Plantas, cortes y fachadas', 'Solo las puertas', 'Solo el mobiliario'],
+          correcta: 1,
+          explicacion: 'Es el conjunto mínimo para representar un proyecto.',
+        ),
+        QuizPregunta(
+          pregunta: 'El estilo gótico se caracteriza por:',
+          opciones: const ['Cúpulas redondas', 'Arcos ojivales y vitrales', 'Columnas dóricas', 'Pirámides escalonadas'],
+          correcta: 1,
+          explicacion: 'Arcos puntiagudos, bóvedas de crucería y vitrales.',
+        ),
+      ];
+
+  static List<QuizPregunta> _bancoComunicacion() => [
+        QuizPregunta(
+          pregunta: 'Las 5W del periodismo son: qué, quién, cuándo, dónde y…',
+          opciones: const ['Por qué', 'Cuánto', 'Cómo', 'Cuál'],
+          correcta: 0,
+          explicacion: 'En inglés "Why" → por qué. (What, Who, When, Where, Why)',
+        ),
+        QuizPregunta(
+          pregunta: 'El lead o "entradilla" de una noticia es:',
+          opciones: const ['El último párrafo', 'El primer párrafo con lo esencial', 'El título', 'La fuente'],
+          correcta: 1,
+          explicacion: 'Resume lo más importante en el primer párrafo.',
+        ),
+        QuizPregunta(
+          pregunta: 'En comunicación, el "feedback" se refiere a:',
+          opciones: const ['Una falla técnica', 'La respuesta del receptor', 'El ruido del canal', 'El emisor'],
+          correcta: 1,
+          explicacion: 'Es la retroalimentación del receptor al emisor.',
         ),
       ];
 

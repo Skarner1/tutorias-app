@@ -559,6 +559,25 @@ class _StudentDashboardState extends State<StudentDashboard> with SingleTickerPr
     return false;
   }
 
+  Widget _horaSelector(BuildContext ctx, String label, TimeOfDay hora, Function(TimeOfDay) onChange) {
+    return OutlinedButton(
+      style: OutlinedButton.styleFrom(
+        padding: const EdgeInsets.symmetric(vertical: 16),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+        side: BorderSide(color: Colors.blue.shade100),
+      ),
+      onPressed: () async {
+        final t = await showTimePicker(context: ctx, initialTime: hora);
+        if (t != null) onChange(t);
+      },
+      child: Column(children: [
+        Text(label, style: const TextStyle(fontSize: 11, color: AppColors.textSecondary, fontWeight: FontWeight.w600)),
+        const SizedBox(height: 2),
+        Text(hora.format(ctx), style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: AppColors.primary)),
+      ]),
+    );
+  }
+
   /// Devuelve true si el documento ya pasó su fecha de expiración.
   /// Para tutorías Libres y Grupos: 1 día tras `fecha`.
   /// Para bloques recurrentes (`horarios_profesores`): semestre = 6 meses.
@@ -2444,6 +2463,282 @@ class _ProfessorDashboardState extends State<ProfessorDashboard> with SingleTick
             child: const Text("ELIMINAR"),
           ),
         ],
+      ),
+    );
+  }
+
+  // ── DIÁLOGOS DE PERFIL / LISTAS ────────────────────────────────
+  void _editarPerfilContacto() {
+    final nC = TextEditingController(text: _perfilContacto['nombre']);
+    final eC = TextEditingController(text: _perfilContacto['correo']);
+    final tC = TextEditingController(text: _perfilContacto['telefono']);
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(28))),
+      builder: (ctx) => Padding(
+        padding: EdgeInsets.only(bottom: MediaQuery.of(ctx).viewInsets.bottom, left: 24, right: 24, top: 28),
+        child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Row(children: [
+            Container(padding: const EdgeInsets.all(8), decoration: BoxDecoration(color: AppColors.primary.withOpacity(0.1), borderRadius: BorderRadius.circular(10)), child: const Icon(Icons.badge_outlined, color: AppColors.primary, size: 20)),
+            const SizedBox(width: 12),
+            const Text("Información de contacto", style: AppTextStyles.headline),
+          ]),
+          const SizedBox(height: 8),
+          Text("Todo es opcional. Solo se mostrará lo que completes.", style: TextStyle(fontSize: 12, color: Colors.grey.shade500)),
+          const SizedBox(height: 20),
+          TextField(controller: nC, decoration: AppTheme.inputDecoration("Nombre público (opcional)", Icons.person_outline)),
+          const SizedBox(height: 12),
+          TextField(controller: eC, keyboardType: TextInputType.emailAddress, decoration: AppTheme.inputDecoration("Correo público (opcional)", Icons.alternate_email)),
+          const SizedBox(height: 12),
+          TextField(controller: tC, keyboardType: TextInputType.phone, decoration: AppTheme.inputDecoration("Teléfono (opcional)", Icons.phone_outlined)),
+          const SizedBox(height: 24),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: AppColors.primary, foregroundColor: Colors.white, minimumSize: const Size(double.infinity, 56), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16))),
+            onPressed: () async {
+              await FirebaseFirestore.instance.collection('users').doc(_user.uid).set({
+                'nombre_publico': nC.text.trim(),
+                'correo_publico': eC.text.trim(),
+                'telefono': tC.text.trim(),
+              }, SetOptions(merge: true));
+              if (mounted) {
+                setState(() => _perfilContacto = {'nombre': nC.text.trim(), 'correo': eC.text.trim(), 'telefono': tC.text.trim()});
+                Navigator.pop(ctx);
+              }
+            },
+            child: const Text("GUARDAR CAMBIOS", style: TextStyle(fontWeight: FontWeight.w800)),
+          ),
+          const SizedBox(height: 32),
+        ]),
+      ),
+    );
+  }
+
+  void _agregarItemLista({
+    required String titulo,
+    required String hint,
+    required IconData icono,
+    required List<String> lista,
+    required Future<void> Function() onGuardar,
+  }) {
+    final ctrl = TextEditingController();
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Text(titulo, style: const TextStyle(fontWeight: FontWeight.w900)),
+        content: TextField(controller: ctrl, autofocus: true, decoration: AppTheme.inputDecoration(hint, icono)),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("CANCELAR")),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: AppColors.primary, foregroundColor: Colors.white),
+            onPressed: () async {
+              if (ctrl.text.trim().isNotEmpty) {
+                setState(() => lista.add(ctrl.text.trim()));
+                await onGuardar();
+                if (mounted) Navigator.pop(ctx);
+              }
+            },
+            child: const Text("AGREGAR"),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _editarItemLista({
+    required int indice,
+    required String valorActual,
+    required String titulo,
+    required String hint,
+    required List<String> lista,
+    required Future<void> Function() onGuardar,
+  }) {
+    final ctrl = TextEditingController(text: valorActual);
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Text(titulo, style: const TextStyle(fontWeight: FontWeight.w900)),
+        content: TextField(controller: ctrl, autofocus: true, decoration: AppTheme.inputDecoration(hint, Icons.edit)),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("CANCELAR")),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.orange, foregroundColor: Colors.white),
+            onPressed: () async {
+              if (ctrl.text.trim().isNotEmpty) {
+                setState(() => lista[indice] = ctrl.text.trim());
+                await onGuardar();
+                if (mounted) Navigator.pop(ctx);
+              }
+            },
+            child: const Text("GUARDAR"),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ── BUILD PRINCIPAL ────────────────────────────────────────────
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        toolbarHeight: 90,
+        title: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          const Text("Bienvenido,", style: TextStyle(fontSize: 13, color: AppColors.textSecondary, fontWeight: FontWeight.w600)),
+          Text(_user.displayName ?? "Docente", style: AppTextStyles.titleModern),
+        ]),
+        actions: [
+          const ThemeToggleButton(),
+          Padding(
+            padding: const EdgeInsets.only(right: 20),
+            child: CircleAvatar(
+              backgroundColor: Colors.red.shade50,
+              child: IconButton(icon: const Icon(Icons.logout_rounded, color: Colors.red), onPressed: () => AuthService().logout()),
+            ),
+          ),
+        ],
+        bottom: TabBar(
+          controller: _tabController,
+          labelColor: AppColors.primary,
+          unselectedLabelColor: AppColors.textSecondary,
+          indicator: UnderlineTabIndicator(borderSide: const BorderSide(width: 4, color: AppColors.primary), insets: const EdgeInsets.symmetric(horizontal: 24)),
+          labelStyle: const TextStyle(fontWeight: FontWeight.w900, fontSize: 13),
+          tabs: const [
+            Tab(icon: Icon(Icons.person_outline, size: 18), text: "Perfil"),
+            Tab(icon: Icon(Icons.calendar_month_outlined, size: 18), text: "Horario"),
+            Tab(icon: Icon(Icons.school_outlined, size: 18), text: "Tutorías"),
+          ],
+        ),
+      ),
+      body: TabBarView(
+        controller: _tabController,
+        children: [
+          _buildPerfilTab(),
+          _buildHorarioTab(),
+          _buildEspaciosTab(),
+        ],
+      ),
+    );
+  }
+
+  // ── TAB 2: ESPACIOS DE TUTORÍA ─────────────────────────────────
+  Widget _buildEspaciosTab() {
+    return Scaffold(
+      backgroundColor: Colors.transparent,
+      body: StreamBuilder<QuerySnapshot>(
+        stream: FirebaseFirestore.instance.collection('tutorias').where('teacherId', isEqualTo: _user.uid).where('tipo', isEqualTo: 'Libre').snapshots(),
+        builder: (ctx, snap) {
+          if (!snap.hasData) return const Center(child: CircularProgressIndicator());
+          final DateTime ahora = DateTime.now();
+          final docs = snap.data!.docs.where((d) {
+            final m = d.data() as Map;
+            final exp = m['expiraEn'];
+            if (exp is Timestamp) return exp.toDate().isAfter(ahora);
+            final f = m['fecha'];
+            if (f is Timestamp) return f.toDate().add(const Duration(days: 1)).isAfter(ahora);
+            return true;
+          }).toList();
+          if (docs.isEmpty) {
+            return Center(
+              child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+                Icon(Icons.calendar_today_outlined, size: 64, color: Colors.grey.shade300),
+                const SizedBox(height: 16),
+                Text("Sin espacios publicados", style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: Colors.grey.shade400)),
+                const SizedBox(height: 8),
+                Text("Toca el botón + para publicar\nun espacio de tutoría extra (válido 1 día)", style: TextStyle(fontSize: 13, color: Colors.grey.shade400), textAlign: TextAlign.center),
+              ]),
+            );
+          }
+          return ListView.builder(
+            padding: const EdgeInsets.all(20),
+            itemCount: docs.length,
+            itemBuilder: (c, i) {
+              final data = docs[i].data() as Map<String, dynamic>;
+              final fecha = (data['fecha'] as Timestamp).toDate();
+              final materia = data['materia'] ?? '';
+              final link = data['link'] ?? 'Por definir';
+              final color = _getMateriaColor(materia);
+              final inscritos = (data['participants'] as List?)?.length ?? 0;
+              final exp = data['expiraEn'];
+              final String expTxt = exp is Timestamp
+                  ? 'Disponible hasta ${DateFormat('d MMM • HH:mm', 'es_ES').format(exp.toDate())}'
+                  : '';
+
+              return Container(
+                margin: const EdgeInsets.only(bottom: 16),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(20),
+                  boxShadow: [BoxShadow(color: color.withOpacity(0.1), blurRadius: 16, offset: const Offset(0, 6))],
+                ),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(20),
+                  child: IntrinsicHeight(
+                    child: Row(children: [
+                      Container(width: 6, color: color),
+                      Expanded(
+                        child: Padding(
+                          padding: const EdgeInsets.all(18),
+                          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                            Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                decoration: BoxDecoration(color: Colors.indigo.withOpacity(0.08), borderRadius: BorderRadius.circular(8)),
+                                child: Row(mainAxisSize: MainAxisSize.min, children: [
+                                  const Icon(Icons.group_outlined, size: 12, color: Colors.indigo),
+                                  const SizedBox(width: 4),
+                                  Text("$inscritos interesado${inscritos == 1 ? '' : 's'}", style: const TextStyle(color: Colors.indigo, fontSize: 10, fontWeight: FontWeight.w800)),
+                                ]),
+                              ),
+                              IconButton(
+                                icon: Icon(Icons.delete_outline_rounded, color: Colors.red.shade300, size: 20),
+                                onPressed: () => _confirmarBorrarEspacio(docs[i].id, materia),
+                                visualDensity: VisualDensity.compact,
+                                padding: EdgeInsets.zero,
+                              ),
+                            ]),
+                            const SizedBox(height: 10),
+                            Text(materia, style: AppTextStyles.headline),
+                            const SizedBox(height: 8),
+                            Row(children: [
+                              Icon(Icons.calendar_month_outlined, size: 14, color: AppColors.textSecondary),
+                              const SizedBox(width: 6),
+                              Text(DateFormat('EEE d MMM • HH:mm', 'es_ES').format(fecha), style: const TextStyle(color: AppColors.textSecondary, fontSize: 13, fontWeight: FontWeight.w500)),
+                            ]),
+                            const SizedBox(height: 4),
+                            Row(children: [
+                              Icon(Icons.place_outlined, size: 14, color: AppColors.textSecondary),
+                              const SizedBox(width: 6),
+                              Expanded(child: Text(link, style: const TextStyle(color: AppColors.textSecondary, fontSize: 13, fontWeight: FontWeight.w500), overflow: TextOverflow.ellipsis)),
+                            ]),
+                            if (expTxt.isNotEmpty) ...[
+                              const SizedBox(height: 4),
+                              Row(children: [
+                                Icon(Icons.timer_outlined, size: 13, color: Colors.grey.shade500),
+                                const SizedBox(width: 6),
+                                Text(expTxt, style: TextStyle(fontSize: 11, color: Colors.grey.shade500, fontWeight: FontWeight.w600)),
+                              ]),
+                            ],
+                          ]),
+                        ),
+                      ),
+                    ]),
+                  ),
+                ),
+              );
+            },
+          );
+        },
+      ),
+      floatingActionButton: FloatingActionButton.extended(
+        backgroundColor: Colors.green,
+        foregroundColor: Colors.white,
+        icon: const Icon(Icons.add),
+        label: const Text("PUBLICAR ESPACIO", style: TextStyle(fontWeight: FontWeight.w800)),
+        onPressed: _crearEspacioLibreDialog,
       ),
     );
   }
