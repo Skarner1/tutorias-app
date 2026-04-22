@@ -20,6 +20,37 @@ class QuizPregunta {
 
 class GeminiService {
   static String? _apiKey;
+
+  /// Detecta si una materia pertenece a las carreras de Ingeniería que cubre la app.
+  /// La app solo tiene quiz para temas técnicos (Facultad de Ingeniería). Cualquier
+  /// otra materia se ignora y NO se le hacen preguntas al estudiante.
+  static bool esMateriaIngenieria(String materia) {
+    final String m = materia.trim().toLowerCase();
+    if (m.isEmpty) return false;
+    const claves = [
+      // Matemáticas / Ciencias base
+      'matemat', 'matemát', 'aritmet', 'aritmét', 'numer', 'núm',
+      'calculo', 'cálculo', 'derivad', 'integral', 'limite', 'límite',
+      'algebra', 'álgebra', 'ecuacion', 'ecuación', 'factoriz', 'matriz', 'matric', 'vector',
+      'estadist', 'estadíst', 'probabilid',
+      'fisic', 'físic', 'mecanic', 'mecánic', 'cinemat', 'dinamic', 'dinámic', 'estatic', 'estátic',
+      'quimic', 'químic',
+      // Ingeniería de Sistemas / Datos / IA
+      'program', 'codig', 'código', 'python', 'java', 'dart', 'software', 'algoritm',
+      'estructura de dat', 'base de dat', 'redes', 'sistemas', 'computa',
+      'datos', 'inteligencia artificial', 'machine learning', 'ia',
+      // Civil / Estructural
+      'civil', 'estructur', 'hidraul', 'hidrául', 'topograf', 'geotecn', 'concret', 'acero',
+      // Industrial
+      'industr', 'logist', 'logíst', 'productiv', 'calidad', 'procesos',
+      // Electrónica / Eléctrica
+      'electr', 'electrón', 'circuit', 'señales',
+      // Genérico ingeniería
+      'ingenier',
+    ];
+    return claves.any((k) => m.contains(k));
+  }
+
   static const List<String> _modelos = [
     'qwen/qwen3-4b:free',
     'google/gemma-3-4b-it:free',
@@ -122,24 +153,35 @@ class GeminiService {
     required String materia,
     int cantidad = 4,
   }) async {
+    // Filtro de carrera: la app solo evalúa temas de Ingeniería.
+    // Si la materia no encaja, devolvemos lista vacía y el flujo principal
+    // saltará el quiz para ir directamente a la reserva sin preguntas.
+    if (!esMateriaIngenieria(materia)) {
+      debugPrint('Quiz omitido: "$materia" no es materia de Ingeniería.');
+      return const [];
+    }
     if (_apiKey != null) {
       final String prompt =
-          'Eres un docente universitario. Genera EXACTAMENTE $cantidad preguntas '
-          'de opcion multiple (4 opciones cada una) SOBRE EL CONTENIDO REAL Y '
-          'BASICO de la materia "$materia". Las preguntas deben evaluar '
-          'conocimientos concretos del tema, NO estrategias de estudio ni habitos. '
+          'Eres un docente universitario de la FACULTAD DE INGENIERIA. Genera EXACTAMENTE $cantidad '
+          'preguntas de opcion multiple (4 opciones cada una) SOBRE EL CONTENIDO REAL Y BASICO '
+          'de la materia "$materia", enmarcada SIEMPRE dentro del contexto de carreras de '
+          'ingenieria (Ing. de Sistemas/Computacion, Ing. Civil, Ing. Industrial, Ing. de Datos e IA, '
+          'Ing. Electronica/Mecanica). Las preguntas deben evaluar conocimientos concretos del tema, '
+          'NO estrategias de estudio ni habitos. NO incluyas temas de derecho, medicina, arte, '
+          'historia general, idiomas, filosofia ni ciencias sociales: SOLO temas tecnicos de ingenieria.\n'
           'Ejemplos del tipo de preguntas esperadas:\n'
-          '- Si la materia es "matematicas" o "aritmetica": operaciones simples '
-          '(sumas, restas, multiplicaciones, divisiones, fracciones, porcentajes).\n'
-          '- Si es "calculo": derivadas e integrales basicas, limites simples.\n'
-          '- Si es "algebra": ecuaciones lineales, factorizacion, despejes.\n'
-          '- Si es "fisica": unidades, formulas basicas (v=d/t, F=ma).\n'
-          '- Si es "programacion": sintaxis basica, tipos de datos, bucles.\n'
-          '- Si es "quimica": tabla periodica, formulas, balanceo simple.\n'
-          '- Si es "historia": fechas y hechos importantes.\n'
-          '- Si es "ingles" u otro idioma: vocabulario y gramatica basica.\n'
-          'NO uses preguntas avanzadas ni de teoria abstracta. Las preguntas '
-          'deben ser de nivel introductorio para verificar prerrequisitos.\n'
+          '- Matematicas/aritmetica: operaciones, fracciones, porcentajes, notacion cientifica.\n'
+          '- Calculo: derivadas, integrales basicas, limites simples.\n'
+          '- Algebra (lineal): ecuaciones, matrices, vectores, despejes.\n'
+          '- Fisica: unidades del SI, cinematica (v=d/t), dinamica (F=ma), energia.\n'
+          '- Programacion/algoritmos: sintaxis basica, tipos de datos, bucles, complejidad.\n'
+          '- Estadistica/probabilidad: media, mediana, varianza, eventos.\n'
+          '- Quimica (para ingenieria): tabla periodica, balanceo simple, mol.\n'
+          '- Circuitos/electronica: ley de Ohm, serie/paralelo, componentes basicos.\n'
+          '- Estructuras/civil: fuerzas, esfuerzos, materiales, planos.\n'
+          '- Industrial: productividad, eficiencia, diagramas de proceso.\n'
+          'NO uses preguntas avanzadas ni de teoria abstracta. Las preguntas deben ser de nivel '
+          'introductorio para verificar prerrequisitos antes de la tutoria.\n'
           'Devuelve SOLO un JSON valido sin texto adicional, con esta forma exacta:\n'
           '{"preguntas":[{"pregunta":"...","opciones":["A","B","C","D"],'
           '"correcta":0,"explicacion":"..."}]}\n'
@@ -227,46 +269,24 @@ class GeminiService {
 
     if (any(['calculo', 'cálculo', 'derivad', 'integral', 'limite', 'límite'])) {
       banco = _bancoCalculo();
-    } else if (any(['algebra', 'álgebra', 'ecuacion', 'ecuación', 'factoriz'])) {
+    } else if (any(['algebra', 'álgebra', 'ecuacion', 'ecuación', 'factoriz', 'matriz', 'matric', 'vector'])) {
       banco = _bancoAlgebra();
     } else if (any(['matemat', 'matemát', 'aritmet', 'aritmét', 'numer', 'núm'])) {
       banco = _bancoMatematicas();
-    } else if (any(['fisic', 'físic', 'mecanic', 'mecánic', 'cinemat'])) {
+    } else if (any(['fisic', 'físic', 'mecanic', 'mecánic', 'cinemat', 'dinamic', 'dinámic', 'estatic', 'estátic'])) {
       banco = _bancoFisica();
-    } else if (any(['program', 'codig', 'código', 'python', 'java', 'dart', 'software', 'algoritm'])) {
+    } else if (any(['program', 'codig', 'código', 'python', 'java', 'dart', 'software', 'algoritm', 'estructura de dat', 'base de dat'])) {
       banco = _bancoProgramacion();
-    } else if (any(['quimic', 'químic'])) {
+    } else if (any(['quimic', 'químic', 'materiales', 'reaccion', 'reacción'])) {
       banco = _bancoQuimica();
-    } else if (any(['ingles', 'inglés', 'english'])) {
-      banco = _bancoIngles();
-    } else if (any(['histor'])) {
-      banco = _bancoHistoria();
     } else if (any(['estadist', 'estadíst', 'probabilid'])) {
       banco = _bancoEstadistica();
-    } else if (any(['biolog', 'biolog', 'celula', 'célula', 'genet', 'genét', 'botan', 'botán'])) {
-      banco = _bancoBiologia();
-    } else if (any(['anatom', 'medic', 'médic', 'fisiolog', 'enferm', 'salud'])) {
-      banco = _bancoMedicina();
-    } else if (any(['derech', 'jurid', 'juríd', 'ley', 'leyes', 'constitu', 'penal', 'civil'])) {
-      banco = _bancoDerecho();
-    } else if (any(['econom', 'finan', 'contab', 'contad', 'admin', 'mercad', 'market'])) {
-      banco = _bancoEconomia();
-    } else if (any(['filosof', 'filosóf', 'etica', 'ética', 'logic', 'lógic'])) {
-      banco = _bancoFilosofia();
-    } else if (any(['psicolog', 'psicolog', 'conduct', 'comport'])) {
-      banco = _bancoPsicologia();
-    } else if (any(['geograf', 'geograf', 'geolog', 'geolog', 'territ', 'mapa'])) {
-      banco = _bancoGeografia();
-    } else if (any(['arte', 'músic', 'music', 'pintur', 'literatur', 'redaccion', 'redacción', 'lengua', 'español', 'espanol', 'castell'])) {
-      banco = _bancoLenguaArte();
-    } else if (any(['ingenier', 'circuit', 'electr', 'mecanism', 'estructur', 'civil', 'industr'])) {
+    } else if (any(['ingenier', 'circuit', 'electr', 'electrón', 'mecanism', 'estructur', 'civil', 'industr', 'redes', 'sistem', 'computa', 'datos', 'inteligencia artificial'])) {
       banco = _bancoIngenieria();
-    } else if (any(['arquitect', 'diseño', 'diseno'])) {
-      banco = _bancoArquitectura();
-    } else if (any(['comunic', 'periodism', 'publicid', 'audiov'])) {
-      banco = _bancoComunicacion();
     } else {
-      banco = _bancoGenerico(materia);
+      // Cualquier otra materia se trata como tema general de ingenieria,
+      // ya que la app esta enfocada en la Facultad de Ingenieria.
+      banco = _bancoIngenieria();
     }
 
     banco.shuffle();
