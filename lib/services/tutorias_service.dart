@@ -101,9 +101,56 @@ class TutoriasService {
 
   // --- GESTIÓN DE PERFIL PROFESOR (MATERIAS QUE DICTA) ---
   Future<void> actualizarMateriasProfesor(String uid, List<String> materias) async {
-    await _db.collection('users').doc(uid).update({
+    await _db.collection('users').doc(uid).set({
       'materias_dicta': materias,
-    });
+    }, SetOptions(merge: true));
+  }
+
+  // --- GESTIÓN DE PERFIL PROFESOR (TUTORÍAS QUE OFRECE) ---
+  Future<void> actualizarTutoriasProfesor(String uid, List<String> tutorias) async {
+    await _db.collection('users').doc(uid).set({
+      'tutorias_dicta': tutorias,
+    }, SetOptions(merge: true));
+  }
+
+  /// Sincroniza el nombre/correo/teléfono del profesor (o estudiante creador)
+  /// en TODAS las tutorías, bloques fijos y grupos donde aparezca, para que
+  /// los cambios de perfil se reflejen al instante en lo que ven los demás.
+  Future<void> sincronizarPerfilEnTutorias({
+    required String uid,
+    String? nombre,
+    String? correo,
+    String? telefono,
+  }) async {
+    final Map<String, dynamic> updates = {};
+    if (nombre != null && nombre.isNotEmpty) updates['teacherName'] = nombre;
+    if (correo != null && correo.isNotEmpty) updates['teacherEmail'] = correo;
+    if (telefono != null && telefono.isNotEmpty) updates['teacherPhone'] = telefono;
+    if (updates.isEmpty) return;
+
+    final batch = _db.batch();
+
+    // 1) Tutorías libres / grupos en colección "tutorias"
+    final tutSnap = await _db
+        .collection('tutorias')
+        .where('teacherId', isEqualTo: uid)
+        .get();
+    for (final d in tutSnap.docs) {
+      batch.update(d.reference, updates);
+    }
+
+    // 2) Bloques fijos en "horarios_profesores"
+    final bloqSnap = await _db
+        .collection('horarios_profesores')
+        .where('teacherId', isEqualTo: uid)
+        .get();
+    for (final d in bloqSnap.docs) {
+      batch.update(d.reference, updates);
+    }
+
+    if (tutSnap.docs.isNotEmpty || bloqSnap.docs.isNotEmpty) {
+      await batch.commit();
+    }
   }
 
   // --- GESTIÓN DE HORARIO ESTUDIANTE ---
