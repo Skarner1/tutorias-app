@@ -522,11 +522,14 @@ class _StudentDashboardState extends State<StudentDashboard> with SingleTickerPr
   final _user = AuthService().currentUser!;
   List<Map<String, dynamic>> _miHorarioCache = [];
   late TabController _tabController;
+  // Nombre mostrado en el header. Se actualiza al instante al editar el perfil.
+  String? _nombreMostrar;
 
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 5, vsync: this);
+    _nombreMostrar = _user.displayName;
     _cargarHorarioLocal();
   }
 
@@ -1221,7 +1224,7 @@ class _StudentDashboardState extends State<StudentDashboard> with SingleTickerPr
         toolbarHeight: 100,
         title: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           const Text("Hola,", style: TextStyle(fontSize: 14, color: AppColors.textSecondary, fontWeight: FontWeight.w600)),
-          Text(_user.displayName ?? "Estudiante", style: AppTextStyles.titleModern),
+          Text(_nombreMostrar ?? _user.displayName ?? "Estudiante", style: AppTextStyles.titleModern),
         ]),
         actions: [
           const ThemeToggleButton(),
@@ -1562,7 +1565,7 @@ class _StudentDashboardState extends State<StudentDashboard> with SingleTickerPr
                 if (mC.text.isNotEmpty) {
                   final lugarFinal = lC.text.isEmpty ? (dentroU ? 'Dentro del campus' : 'Fuera del campus') : lC.text;
                   await _tutoriasService.crearGrupoEstudio(
-                    creatorId: _user.uid, creatorName: _user.displayName ?? 'Est',
+                    creatorId: _user.uid, creatorName: _nombreMostrar ?? _user.displayName ?? 'Est',
                     materia: mC.text, tema: '',
                     lugar: dentroU ? lugarFinal : '⚠️ FUERA CAMPUS: $lugarFinal',
                     fecha: DateTime(f.year, f.month, f.day, h.hour, h.minute),
@@ -1579,7 +1582,63 @@ class _StudentDashboardState extends State<StudentDashboard> with SingleTickerPr
     );
   }
   void _borrarGrupo(String docId) { showDialog(context: context, builder: (ctx)=>AlertDialog(title: const Text("Borrar Grupo"), actions: [TextButton(onPressed: ()=>Navigator.pop(ctx), child: const Text("CANCELAR")), ElevatedButton(onPressed: (){FirebaseFirestore.instance.collection('tutorias').doc(docId).delete(); Navigator.pop(ctx);}, child: const Text("BORRAR"))])); }
-  void _editarPerfil() { final nC=TextEditingController(text: _user.displayName); showDialog(context: context, builder: (ctx) => AlertDialog(shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)), title: const Text("Mi Perfil"), content: TextField(controller: nC, decoration: AppTheme.inputDecoration("Nombre Completo", Icons.person)), actions: [ElevatedButton(onPressed: () async { await AuthService().updateName(nC.text); Navigator.pop(ctx); }, child: const Text("GUARDAR"))])); }
+  void _editarPerfil() {
+    final nC = TextEditingController(text: _nombreMostrar ?? _user.displayName);
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        title: Row(children: const [
+          Icon(Icons.badge_outlined, color: AppColors.primary),
+          SizedBox(width: 10),
+          Text("Mi Perfil", style: TextStyle(fontWeight: FontWeight.w900)),
+        ]),
+        content: Column(mainAxisSize: MainAxisSize.min, children: [
+          TextField(controller: nC, decoration: AppTheme.inputDecoration("Nombre Completo", Icons.person)),
+          const SizedBox(height: 8),
+          Text(
+            "Tu nombre se actualizará al instante en el saludo y en todos los grupos / tutorías que hayas creado.",
+            style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
+          ),
+        ]),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("CANCELAR")),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: AppColors.primary, foregroundColor: Colors.white),
+            onPressed: () async {
+              final nuevo = nC.text.trim();
+              if (nuevo.isEmpty) return;
+              try {
+                await AuthService().updateName(nuevo);
+                // Propaga el nuevo nombre a todos los grupos/tutorías creados por el estudiante
+                await _tutoriasService.sincronizarPerfilEnTutorias(
+                  uid: _user.uid,
+                  nombre: nuevo,
+                  correo: _user.email,
+                );
+                if (mounted) {
+                  setState(() => _nombreMostrar = nuevo);
+                  Navigator.pop(ctx);
+                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                    content: Text("✅ Perfil actualizado"),
+                    backgroundColor: Colors.green,
+                  ));
+                }
+              } catch (e) {
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                    content: Text("❌ No se pudo guardar: $e"),
+                    backgroundColor: Colors.red,
+                  ));
+                }
+              }
+            },
+            child: const Text("GUARDAR"),
+          ),
+        ],
+      ),
+    );
+  }
   void _mostrarDialogoAgregarClase() {
     final dias = ["Lunes","Martes","Miércoles","Jueves","Viernes","Sábado"];
     String dS = "Lunes";
@@ -1728,6 +1787,18 @@ class _ProfessorDashboardState extends State<ProfessorDashboard> with SingleTick
     return colors[materia.length % colors.length];
   }
 
+  // Helpers para usar SIEMPRE el nombre/correo público actualizado al crear tutorías.
+  String get _nombrePublicoActual {
+    final n = _perfilContacto['nombre'] ?? '';
+    if (n.isNotEmpty) return n;
+    return _user.displayName ?? 'Docente';
+  }
+  String get _correoPublicoActual {
+    final c = _perfilContacto['correo'] ?? '';
+    if (c.isNotEmpty) return c;
+    return _user.email ?? '';
+  }
+
   String _formatoHora(int militar) {
     int h = (militar / 100).floor(); int m = militar % 100;
     return "${h.toString().padLeft(2,'0')}:${m.toString().padLeft(2,'0')}";
@@ -1814,8 +1885,17 @@ class _ProfessorDashboardState extends State<ProfessorDashboard> with SingleTick
             onGuardar: () => _tutoriasService.actualizarMateriasProfesor(_user.uid, _misMateriasConfiguradas),
           ),
           onEliminar: (i) async {
+            final removed = _misMateriasConfiguradas[i];
             setState(() => _misMateriasConfiguradas.removeAt(i));
-            await _tutoriasService.actualizarMateriasProfesor(_user.uid, _misMateriasConfiguradas);
+            try {
+              await _tutoriasService.actualizarMateriasProfesor(_user.uid, _misMateriasConfiguradas);
+            } catch (e) {
+              if (mounted) {
+                setState(() => _misMateriasConfiguradas.insert(i, removed));
+                ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                  content: Text("❌ No se pudo eliminar: $e"), backgroundColor: Colors.red));
+              }
+            }
           },
           onEditar: (i, valorActual) => _editarItemLista(
             indice: i,
@@ -1839,11 +1919,20 @@ class _ProfessorDashboardState extends State<ProfessorDashboard> with SingleTick
             hint: "Ej: Álgebra Lineal",
             icono: Icons.school,
             lista: _misTutoriasConfiguradas,
-            onGuardar: () => FirebaseFirestore.instance.collection('users').doc(_user.uid).update({'tutorias_dicta': _misTutoriasConfiguradas}),
+            onGuardar: () => _tutoriasService.actualizarTutoriasProfesor(_user.uid, _misTutoriasConfiguradas),
           ),
           onEliminar: (i) async {
+            final removed = _misTutoriasConfiguradas[i];
             setState(() => _misTutoriasConfiguradas.removeAt(i));
-            await FirebaseFirestore.instance.collection('users').doc(_user.uid).update({'tutorias_dicta': _misTutoriasConfiguradas});
+            try {
+              await _tutoriasService.actualizarTutoriasProfesor(_user.uid, _misTutoriasConfiguradas);
+            } catch (e) {
+              if (mounted) {
+                setState(() => _misTutoriasConfiguradas.insert(i, removed));
+                ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                  content: Text("❌ No se pudo eliminar: $e"), backgroundColor: Colors.red));
+              }
+            }
           },
           onEditar: (i, valorActual) => _editarItemLista(
             indice: i,
@@ -1851,7 +1940,7 @@ class _ProfessorDashboardState extends State<ProfessorDashboard> with SingleTick
             titulo: "Editar tutoría",
             hint: "Ej: Álgebra Lineal",
             lista: _misTutoriasConfiguradas,
-            onGuardar: () => FirebaseFirestore.instance.collection('users').doc(_user.uid).update({'tutorias_dicta': _misTutoriasConfiguradas}),
+            onGuardar: () => _tutoriasService.actualizarTutoriasProfesor(_user.uid, _misTutoriasConfiguradas),
           ),
         ),
         const SizedBox(height: 24),
@@ -1868,89 +1957,147 @@ class _ProfessorDashboardState extends State<ProfessorDashboard> with SingleTick
     required Function(int) onEliminar,
     Function(int, String)? onEditar,
   }) {
+    final esMaterias = titulo.toLowerCase().contains('materia');
     return Container(
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(20),
-        boxShadow: [BoxShadow(color: color.withOpacity(0.07), blurRadius: 16, offset: const Offset(0, 4))],
+        borderRadius: BorderRadius.circular(22),
+        border: Border.all(color: color.withOpacity(0.12), width: 1),
+        boxShadow: [BoxShadow(color: color.withOpacity(0.06), blurRadius: 18, offset: const Offset(0, 6))],
       ),
-      child: Column(children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(20, 18, 12, 14),
-          child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-            Row(children: [
-              Container(padding: const EdgeInsets.all(8), decoration: BoxDecoration(color: color.withOpacity(0.1), borderRadius: BorderRadius.circular(10)), child: Icon(icono, color: color, size: 18)),
-              const SizedBox(width: 12),
-              Text(titulo, style: TextStyle(fontWeight: FontWeight.w900, fontSize: 15, color: color)),
-            ]),
-            TextButton.icon(
-              onPressed: onAgregar,
-              icon: Icon(Icons.add_circle_outline, color: color, size: 18),
-              label: Text("Agregar", style: TextStyle(color: color, fontSize: 12, fontWeight: FontWeight.w700)),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        // ── HEADER con contador ──
+        Container(
+          padding: const EdgeInsets.fromLTRB(18, 16, 12, 14),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              colors: [color.withOpacity(0.10), color.withOpacity(0.02)],
+              begin: Alignment.topLeft, end: Alignment.bottomRight,
+            ),
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(22)),
+          ),
+          child: Row(children: [
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: color,
+                borderRadius: BorderRadius.circular(12),
+                boxShadow: [BoxShadow(color: color.withOpacity(0.35), blurRadius: 10, offset: const Offset(0, 4))],
+              ),
+              child: Icon(icono, color: Colors.white, size: 18),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Text(titulo, style: TextStyle(fontWeight: FontWeight.w900, fontSize: 15, color: color, letterSpacing: -0.3)),
+                const SizedBox(height: 2),
+                Text(
+                  items.isEmpty ? "Sin elementos aún" : "${items.length} ${items.length == 1 ? 'elemento' : 'elementos'}",
+                  style: TextStyle(fontSize: 11, color: color.withOpacity(0.7), fontWeight: FontWeight.w600),
+                ),
+              ]),
+            ),
+            Material(
+              color: color,
+              shape: const StadiumBorder(),
+              child: InkWell(
+                customBorder: const StadiumBorder(),
+                onTap: onAgregar,
+                child: const Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                  child: Row(mainAxisSize: MainAxisSize.min, children: [
+                    Icon(Icons.add, color: Colors.white, size: 16),
+                    SizedBox(width: 4),
+                    Text("Agregar", style: TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 12)),
+                  ]),
+                ),
+              ),
             ),
           ]),
         ),
+
+        // ── BODY ──
         if (items.isEmpty)
           Padding(
-            padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
-            child: Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(color: color.withOpacity(0.04), borderRadius: BorderRadius.circular(12)),
-              child: Row(children: [
-                Icon(Icons.info_outline, color: color.withOpacity(0.5), size: 18),
-                const SizedBox(width: 10),
-                Expanded(child: Text("Sin elementos. Toca Agregar para añadir.", style: TextStyle(color: color.withOpacity(0.6), fontSize: 13))),
-              ]),
-            ),
+            padding: const EdgeInsets.fromLTRB(18, 22, 18, 26),
+            child: Column(children: [
+              Icon(Icons.inbox_outlined, color: color.withOpacity(0.25), size: 42),
+              const SizedBox(height: 8),
+              Text("Aún no agregas nada aquí",
+                  style: TextStyle(color: color.withOpacity(0.6), fontWeight: FontWeight.w700, fontSize: 13)),
+              const SizedBox(height: 2),
+              Text("Toca el botón Agregar para empezar",
+                  style: TextStyle(color: Colors.grey.shade500, fontSize: 11)),
+            ]),
           )
         else
           Padding(
-            padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-            child: Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: items.asMap().entries.map((entry) {
-                final c = _getMateriaColor(entry.value);
+            padding: const EdgeInsets.fromLTRB(12, 6, 12, 12),
+            child: Column(
+              children: List.generate(items.length, (i) {
+                final valor = items[i];
+                final c = _getMateriaColor(valor);
                 return Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  margin: const EdgeInsets.symmetric(vertical: 4),
                   decoration: BoxDecoration(
-                    color: c.withOpacity(0.12),
-                    borderRadius: BorderRadius.circular(30),
-                    border: Border.all(color: c.withOpacity(0.3)),
+                    color: c.withOpacity(0.06),
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(color: c.withOpacity(0.18)),
                   ),
-                  child: Row(mainAxisSize: MainAxisSize.min, children: [
-                    // Toca el texto para editar
-                    GestureDetector(
-                      onTap: onEditar != null
-                          ? () => onEditar(entry.key, entry.value)
-                          : null,
-                      child: Row(mainAxisSize: MainAxisSize.min, children: [
-                        Text(entry.value, style: TextStyle(color: c.withOpacity(0.9), fontWeight: FontWeight.w700, fontSize: 13)),
-                        if (onEditar != null) ...[
-                          const SizedBox(width: 4),
-                          Icon(Icons.edit, size: 12, color: c.withOpacity(0.5)),
-                        ],
-                      ]),
-                    ),
-                    const SizedBox(width: 6),
-                    // Toca la X para eliminar directamente
-                    GestureDetector(
-                      onTap: () => onEliminar(entry.key),
-                      child: Container(
-                        padding: const EdgeInsets.all(2),
-                        decoration: BoxDecoration(
-                          color: Colors.red.withOpacity(0.1),
-                          shape: BoxShape.circle,
-                        ),
-                        child: Icon(Icons.close, size: 14, color: Colors.red.shade400),
+                  child: ListTile(
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
+                    leading: Container(
+                      width: 42, height: 42,
+                      decoration: BoxDecoration(color: c.withOpacity(0.18), borderRadius: BorderRadius.circular(12)),
+                      alignment: Alignment.center,
+                      child: Text(
+                        valor.isNotEmpty ? valor[0].toUpperCase() : '?',
+                        style: TextStyle(color: c, fontWeight: FontWeight.w900, fontSize: 17),
                       ),
                     ),
-                  ]),
+                    title: Text(valor, style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 14)),
+                    subtitle: Text(
+                      esMaterias ? "Materia que dictas" : "Tutoría que ofreces",
+                      style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
+                    ),
+                    trailing: Row(mainAxisSize: MainAxisSize.min, children: [
+                      if (onEditar != null)
+                        IconButton(
+                          tooltip: "Editar",
+                          icon: Icon(Icons.edit_outlined, color: c, size: 20),
+                          onPressed: () => onEditar(i, valor),
+                        ),
+                      IconButton(
+                        tooltip: "Eliminar",
+                        icon: Icon(Icons.delete_outline, color: Colors.red.shade400, size: 20),
+                        onPressed: () => _confirmarEliminarItem(valor, () => onEliminar(i)),
+                      ),
+                    ]),
+                  ),
                 );
-              }).toList(),
+              }),
             ),
           ),
       ]),
+    );
+  }
+
+  void _confirmarEliminarItem(String nombre, VoidCallback onConfirm) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Text("¿Eliminar?", style: TextStyle(fontWeight: FontWeight.w900)),
+        content: Text("Se eliminará '$nombre' de tu perfil."),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("CANCELAR")),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white),
+            onPressed: () { Navigator.pop(ctx); onConfirm(); },
+            child: const Text("ELIMINAR"),
+          ),
+        ],
+      ),
     );
   }
 
@@ -2244,7 +2391,18 @@ class _ProfessorDashboardState extends State<ProfessorDashboard> with SingleTick
     String dS = "Lunes";
     TimeOfDay hI = const TimeOfDay(hour: 8, minute: 0);
     TimeOfDay hF = const TimeOfDay(hour: 10, minute: 0);
-    String? mS = _misMateriasConfiguradas.isNotEmpty ? _misMateriasConfiguradas.first : null;
+    // Unificamos materias y tutorías para que aparezca todo lo configurado en el perfil.
+    final List<String> opcionesProfesor =
+        {..._misMateriasConfiguradas, ..._misTutoriasConfiguradas}.toList();
+    if (opcionesProfesor.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text("Configura tus materias o tutorías en el perfil primero."),
+        backgroundColor: Colors.orange,
+      ));
+      _tabController.animateTo(0);
+      return;
+    }
+    String? mS = opcionesProfesor.first;
     final sC = TextEditingController();
 
     showModalBottomSheet(
@@ -2265,7 +2423,7 @@ class _ProfessorDashboardState extends State<ProfessorDashboard> with SingleTick
             DropdownButtonFormField<String>(
               value: mS,
               decoration: AppTheme.inputDecoration("Materia", Icons.book),
-              items: _misMateriasConfiguradas.map((m) => DropdownMenuItem(value: m, child: Text(m))).toList(),
+              items: opcionesProfesor.map((m) => DropdownMenuItem(value: m, child: Text(m))).toList(),
               onChanged: (v) => setS(() => mS = v),
             ),
             const SizedBox(height: 12),
@@ -2334,7 +2492,9 @@ class _ProfessorDashboardState extends State<ProfessorDashboard> with SingleTick
                   final DateTime expira = DateTime(ahora.year, ahora.month + 6, ahora.day);
                   await FirebaseFirestore.instance.collection('horarios_profesores').add({
                     'teacherId': _user.uid,
-                    'teacherName': _user.displayName ?? 'Docente',
+                    'teacherName': _nombrePublicoActual,
+                    'teacherEmail': _correoPublicoActual,
+                    'teacherPhone': _perfilContacto['telefono'] ?? '',
                     'materia': mS,
                     'dia': dS,
                     'horaInicio': inicio,
@@ -2441,8 +2601,8 @@ class _ProfessorDashboardState extends State<ProfessorDashboard> with SingleTick
               style: ElevatedButton.styleFrom(backgroundColor: Colors.green, foregroundColor: Colors.white, minimumSize: const Size(double.infinity, 56), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16))),
               onPressed: () async {
                 await _tutoriasService.crearTutoria(
-                  teacherId: _user.uid, teacherEmail: _user.email!,
-                  teacherName: _user.displayName ?? 'Docente',
+                  teacherId: _user.uid, teacherEmail: _correoPublicoActual,
+                  teacherName: _nombrePublicoActual,
                   materia: mS, descripcion: 'Extra',
                   link: lC.text.isEmpty ? 'Por definir' : lC.text,
                   fecha: DateTime(f.year, f.month, f.day, hI.hour, hI.minute),
@@ -2508,14 +2668,45 @@ class _ProfessorDashboardState extends State<ProfessorDashboard> with SingleTick
           ElevatedButton(
             style: ElevatedButton.styleFrom(backgroundColor: AppColors.primary, foregroundColor: Colors.white, minimumSize: const Size(double.infinity, 56), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16))),
             onPressed: () async {
-              await FirebaseFirestore.instance.collection('users').doc(_user.uid).set({
-                'nombre_publico': nC.text.trim(),
-                'correo_publico': eC.text.trim(),
-                'telefono': tC.text.trim(),
-              }, SetOptions(merge: true));
-              if (mounted) {
-                setState(() => _perfilContacto = {'nombre': nC.text.trim(), 'correo': eC.text.trim(), 'telefono': tC.text.trim()});
-                Navigator.pop(ctx);
+              final nombre = nC.text.trim();
+              final correo = eC.text.trim();
+              final telefono = tC.text.trim();
+              try {
+                // 1. Guardar perfil público
+                await FirebaseFirestore.instance.collection('users').doc(_user.uid).set({
+                  'nombre_publico': nombre,
+                  'correo_publico': correo,
+                  'telefono': telefono,
+                }, SetOptions(merge: true));
+
+                // 2. Sincronizar el displayName en Auth + users si cambió el nombre
+                if (nombre.isNotEmpty && nombre != _user.displayName) {
+                  await AuthService().updateName(nombre);
+                }
+
+                // 3. Propagar a TODAS las tutorías y bloques que el profesor ya tiene
+                await _tutoriasService.sincronizarPerfilEnTutorias(
+                  uid: _user.uid,
+                  nombre: nombre.isNotEmpty ? nombre : (_user.displayName ?? ''),
+                  correo: correo.isNotEmpty ? correo : _user.email,
+                  telefono: telefono,
+                );
+
+                if (mounted) {
+                  setState(() => _perfilContacto = {'nombre': nombre, 'correo': correo, 'telefono': telefono});
+                  Navigator.pop(ctx);
+                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                    content: Text("✅ Perfil actualizado y propagado a tus tutorías"),
+                    backgroundColor: Colors.green,
+                  ));
+                }
+              } catch (e) {
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                    content: Text("❌ No se pudo guardar: $e"),
+                    backgroundColor: Colors.red,
+                  ));
+                }
               }
             },
             child: const Text("GUARDAR CAMBIOS", style: TextStyle(fontWeight: FontWeight.w800)),
@@ -2545,10 +2736,19 @@ class _ProfessorDashboardState extends State<ProfessorDashboard> with SingleTick
           ElevatedButton(
             style: ElevatedButton.styleFrom(backgroundColor: AppColors.primary, foregroundColor: Colors.white),
             onPressed: () async {
-              if (ctrl.text.trim().isNotEmpty) {
-                setState(() => lista.add(ctrl.text.trim()));
+              final nuevo = ctrl.text.trim();
+              if (nuevo.isEmpty) return;
+              setState(() => lista.add(nuevo));
+              try {
                 await onGuardar();
                 if (mounted) Navigator.pop(ctx);
+              } catch (e) {
+                setState(() => lista.remove(nuevo));
+                if (mounted) {
+                  Navigator.pop(ctx);
+                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                    content: Text("❌ No se pudo guardar: $e"), backgroundColor: Colors.red));
+                }
               }
             },
             child: const Text("AGREGAR"),
@@ -2578,10 +2778,20 @@ class _ProfessorDashboardState extends State<ProfessorDashboard> with SingleTick
           ElevatedButton(
             style: ElevatedButton.styleFrom(backgroundColor: Colors.orange, foregroundColor: Colors.white),
             onPressed: () async {
-              if (ctrl.text.trim().isNotEmpty) {
-                setState(() => lista[indice] = ctrl.text.trim());
+              final nuevoValor = ctrl.text.trim();
+              if (nuevoValor.isEmpty) return;
+              final anterior = lista[indice];
+              setState(() => lista[indice] = nuevoValor);
+              try {
                 await onGuardar();
                 if (mounted) Navigator.pop(ctx);
+              } catch (e) {
+                setState(() => lista[indice] = anterior);
+                if (mounted) {
+                  Navigator.pop(ctx);
+                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                    content: Text("❌ No se pudo guardar: $e"), backgroundColor: Colors.red));
+                }
               }
             },
             child: const Text("GUARDAR"),
@@ -2599,7 +2809,12 @@ class _ProfessorDashboardState extends State<ProfessorDashboard> with SingleTick
         toolbarHeight: 90,
         title: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           const Text("Bienvenido,", style: TextStyle(fontSize: 13, color: AppColors.textSecondary, fontWeight: FontWeight.w600)),
-          Text(_user.displayName ?? "Docente", style: AppTextStyles.titleModern),
+          Text(
+            (_perfilContacto['nombre']?.isNotEmpty ?? false)
+                ? _perfilContacto['nombre']!
+                : (_user.displayName ?? "Docente"),
+            style: AppTextStyles.titleModern,
+          ),
         ]),
         actions: [
           const ThemeToggleButton(),
