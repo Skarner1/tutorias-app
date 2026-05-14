@@ -1,4 +1,3 @@
-import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -9,7 +8,6 @@ import 'services/auth_service.dart';
 import 'services/tutorias_service.dart';
 import 'services/ai_service.dart';
 import 'services/gemini_service.dart';
-import 'services/connectivity_service.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
 void main() async {
@@ -141,89 +139,20 @@ class ThemeToggleButton extends StatelessWidget {
   }
 }
 
-class AuthWrapper extends StatefulWidget {
+class AuthWrapper extends StatelessWidget {
   const AuthWrapper({super.key});
-  @override
-  State<AuthWrapper> createState() => _AuthWrapperState();
-}
-
-class _AuthWrapperState extends State<AuthWrapper> {
-  final AuthService _authService = AuthService();
-  Timer? _monitorConexion;
-  int _fallosConsecutivos = 0;
-  bool _dialogVisible = false;
-
-  @override
-  void initState() {
-    super.initState();
-    // Cada 12s revisa si la app sigue teniendo internet. Si falla 2 veces
-    // seguidas (≈24s) y hay sesión activa, cierra sesión y vuelve al login.
-    _monitorConexion = Timer.periodic(const Duration(seconds: 12), (_) => _verificarConexion());
-  }
-
-  Future<void> _verificarConexion() async {
-    if (_authService.currentUser == null) return; // solo si hay sesión
-    final ok = await ConnectivityService.hasInternet();
-    if (!mounted) return;
-    if (ok) {
-      _fallosConsecutivos = 0;
-      return;
-    }
-    _fallosConsecutivos++;
-    if (_fallosConsecutivos >= 2 && !_dialogVisible) {
-      _mostrarDialogoSinConexion();
-    }
-  }
-
-  void _mostrarDialogoSinConexion() {
-    _dialogVisible = true;
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: Row(children: const [
-          Icon(Icons.wifi_off_rounded, color: AppColors.error),
-          SizedBox(width: 10),
-          Expanded(child: Text("Error de conexión", style: TextStyle(fontWeight: FontWeight.w900, fontSize: 17))),
-        ]),
-        content: const Text(
-          "Se perdió la conexión a internet. Por seguridad se cerrará tu sesión. "
-          "Vuelve a ingresar cuando recuperes la red.",
-          style: TextStyle(height: 1.5),
-        ),
-        actions: [
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: AppColors.primary, foregroundColor: Colors.white),
-            onPressed: () async {
-              Navigator.pop(ctx);
-              _dialogVisible = false;
-              _fallosConsecutivos = 0;
-              await _authService.logout();
-            },
-            child: const Text("CERRAR SESIÓN"),
-          ),
-        ],
-      ),
-    ).then((_) => _dialogVisible = false);
-  }
-
-  @override
-  void dispose() {
-    _monitorConexion?.cancel();
-    super.dispose();
-  }
 
   @override
   Widget build(BuildContext context) {
+    final authService = AuthService();
     return StreamBuilder<User?>(
-      stream: _authService.authStateChanges,
+      stream: authService.authStateChanges,
       builder: (context, snapshot) {
         if (!snapshot.hasData || snapshot.data == null) return const LoginPage();
         final user = snapshot.data!;
         if (!user.emailVerified) return const LoginPage();
         return FutureBuilder<Map<String, dynamic>>(
-          future: _authService.getUserData(),
+          future: authService.getUserData(),
           builder: (context, dataSnap) {
             if (!dataSnap.hasData) return const Scaffold(body: Center(child: CircularProgressIndicator()));
             final userData = dataSnap.data!;
@@ -251,25 +180,6 @@ class _LoginPageState extends State<LoginPage> {
   final _auth = AuthService();
   bool _loading = false;
 
-  Future<bool> _sinInternet() async {
-    final ok = await ConnectivityService.hasInternet();
-    if (!ok && mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Row(children: const [
-            Icon(Icons.wifi_off_rounded, color: Colors.white),
-            SizedBox(width: 10),
-            Expanded(child: Text("Error de conexión: revisa tu internet e intenta de nuevo")),
-          ]),
-          backgroundColor: AppColors.error,
-          behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        ),
-      );
-    }
-    return !ok;
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -292,7 +202,6 @@ class _LoginPageState extends State<LoginPage> {
                 ElevatedButton(
                     style: ElevatedButton.styleFrom(backgroundColor: AppColors.primary, foregroundColor: Colors.white, padding: const EdgeInsets.symmetric(vertical: 18), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)), elevation: 8, shadowColor: AppColors.primary.withOpacity(0.4)),
                     onPressed: () async {
-                      if (await _sinInternet()) return;
                       setState(() => _loading = true);
                       String? error = await _auth.login(email: _emailCtrl.text.trim(), password: _passCtrl.text.trim());
                       if (error != null && mounted) {
@@ -369,7 +278,6 @@ class _LoginPageState extends State<LoginPage> {
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                     ),
                     onPressed: () async {
-                      if (await _sinInternet()) return;
                       setS(() => enviando = true);
                       final email = emailCtrl.text.trim();
                       final error = await _auth.resetPassword(email);
@@ -567,7 +475,6 @@ class _LoginPageState extends State<LoginPage> {
                         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("La contraseña debe tener al menos 6 caracteres"), backgroundColor: Colors.orange));
                         return;
                       }
-                      if (await _sinInternet()) return;
                       setS(() => registrando = true);
                       final error = await _auth.register(email: email, password: pass, role: rolSeleccionado);
                       if (!ctx.mounted) return;
